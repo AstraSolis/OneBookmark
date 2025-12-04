@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   getBackups,
-  getEnabledBackups,
+  getUploadEnabledBackups,
+  getDownloadEnabledBackups,
   addBackup,
   updateBackup,
   deleteBackup,
@@ -86,6 +87,22 @@ export function Dashboard() {
     await loadBackups()
   }
 
+  async function handleToggleUpload(id: string) {
+    const backup = backups.find(b => b.id === id)
+    if (backup) {
+      await updateBackup(id, { uploadEnabled: backup.uploadEnabled === false })
+      await loadBackups()
+    }
+  }
+
+  async function handleToggleDownload(id: string) {
+    const backup = backups.find(b => b.id === id)
+    if (backup) {
+      await updateBackup(id, { downloadEnabled: backup.downloadEnabled === false })
+      await loadBackups()
+    }
+  }
+
   async function handleModalSubmit(data: { name: string; token: string; gistId: string }) {
     try {
       if (editingBackup) {
@@ -99,6 +116,8 @@ export function Dashboard() {
         await addBackup({
           name: data.name || 'GitHub Gist',
           enabled: true,
+          uploadEnabled: true,
+          downloadEnabled: true,
           type: 'gist',
           token: data.token,
           gistId: data.gistId || null,
@@ -115,9 +134,9 @@ export function Dashboard() {
 
   // 批量上传到所有启用的备份
   async function handleBatchPush() {
-    const enabled = await getEnabledBackups()
+    const enabled = await getUploadEnabledBackups()
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: '没有启用的备份' })
+      setMessage({ type: 'error', text: '没有启用上传的备份' })
       return
     }
     if (await isLocked()) {
@@ -161,9 +180,9 @@ export function Dashboard() {
 
   // 打开下载选择弹窗
   function handleBatchPull() {
-    const enabled = backups.filter(b => b.enabled)
+    const enabled = backups.filter(b => b.enabled && b.downloadEnabled !== false)
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: '没有启用的备份' })
+      setMessage({ type: 'error', text: '没有启用下载的备份' })
       return
     }
     setShowPullModal(true)
@@ -259,6 +278,8 @@ export function Dashboard() {
                 onEdit={() => handleEditBackup(backup)}
                 onDelete={() => handleDeleteBackup(backup.id)}
                 onToggle={() => handleToggleBackup(backup.id)}
+                onToggleUpload={() => handleToggleUpload(backup.id)}
+                onToggleDownload={() => handleToggleDownload(backup.id)}
                 onUpdate={loadBackups}
               />
             ))}
@@ -283,7 +304,7 @@ export function Dashboard() {
       />
       <PullSelectModal
         isOpen={showPullModal}
-        backups={backups.filter(b => b.enabled)}
+        backups={backups.filter(b => b.enabled && b.downloadEnabled !== false)}
         onClose={() => setShowPullModal(false)}
         onSelect={handlePullFromBackup}
       />
@@ -297,10 +318,12 @@ interface BackupCardProps {
   onEdit: () => void
   onDelete: () => void
   onToggle: () => void
+  onToggleUpload: () => void
+  onToggleDownload: () => void
   onUpdate: () => void
 }
 
-function BackupCard({ backup, onEdit, onDelete, onToggle, onUpdate }: BackupCardProps) {
+function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate }: BackupCardProps) {
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -364,7 +387,7 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onUpdate }: BackupCard
     : null
 
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group animate-slide-up ${backup.enabled ? 'border-gray-100' : 'border-gray-200 opacity-60'}`}>
+    <div className={`bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group animate-slide-up ${backup.enabled ? 'border-gray-100' : 'border-gray-200 opacity-60'} ${showMenu ? 'z-50 relative' : ''}`}>
       <div className="p-5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl overflow-hidden bg-sky-100 flex-shrink-0 border-2 border-white shadow-sm">
@@ -377,8 +400,11 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onUpdate }: BackupCard
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-semibold text-slate-800">{backup.name}</span>
-              {backup.enabled && (
-                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">启用</span>
+              {backup.uploadEnabled !== false && (
+                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">上传</span>
+              )}
+              {backup.downloadEnabled !== false && (
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium border border-emerald-100">下载</span>
               )}
             </div>
             {backup.gistUrl ? (
@@ -416,26 +442,36 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onUpdate }: BackupCard
                 </svg>
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-full mt-1 w-28 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                  <button onClick={handlePush} disabled={syncing} className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2">
-                    {syncing ? <Spinner /> : <UploadIcon />}
-                    {syncing ? '上传中...' : '上传'}
-                  </button>
-                  <button onClick={handlePull} disabled={restoring} className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-2">
-                    {restoring ? <Spinner /> : <DownloadIcon />}
-                    {restoring ? '下载中...' : '下载'}
-                  </button>
+                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                  <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
+                    <button onClick={handlePush} disabled={syncing} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
+                      {syncing ? <Spinner /> : <UploadIcon />}
+                      {syncing ? '上传中...' : '上传'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleUpload() }}
+                      className={`relative w-8 h-4 rounded-full transition-colors ${backup.uploadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
+                      title={backup.uploadEnabled !== false ? '禁用上传' : '启用上传'}
+                    >
+                      <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.uploadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
+                    <button onClick={handlePull} disabled={restoring} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
+                      {restoring ? <Spinner /> : <DownloadIcon />}
+                      {restoring ? '下载中...' : '下载'}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleDownload() }}
+                      className={`relative w-8 h-4 rounded-full transition-colors ${backup.downloadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
+                      title={backup.downloadEnabled !== false ? '禁用下载' : '启用下载'}
+                    >
+                      <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.downloadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-            {/* 启用开关 */}
-            <button
-              onClick={onToggle}
-              className={`relative w-10 h-6 rounded-full transition-colors ${backup.enabled ? 'bg-sky-400' : 'bg-gray-300'}`}
-              title={backup.enabled ? '点击禁用' : '点击启用'}
-            >
-              <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${backup.enabled ? 'left-5' : 'left-1'}`} />
-            </button>
           </div>
         </div>
       </div>

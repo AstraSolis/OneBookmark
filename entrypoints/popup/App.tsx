@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getBackups, getEnabledBackups, updateBackup, type BackupConfig } from '@/utils/storage'
+import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, type BackupConfig } from '@/utils/storage'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
@@ -15,7 +15,8 @@ function App() {
   const [message, setMessage] = useState('')
   const [lastSync, setLastSync] = useState<string | null>(null)
   const [hasConfig, setHasConfig] = useState(false)
-  const [enabledBackups, setEnabledBackups] = useState<BackupWithProfile[]>([])
+  const [uploadBackups, setUploadBackups] = useState<BackupWithProfile[]>([])
+  const [downloadBackups, setDownloadBackups] = useState<BackupWithProfile[]>([])
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [folderCount, setFolderCount] = useState(0)
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; elapsed?: number } | null>(null)
@@ -47,22 +48,29 @@ function App() {
 
   async function loadStatus() {
     const backups = await getBackups()
-    const enabled = backups.filter(b => b.enabled)
     setHasConfig(backups.length > 0)
     
-    // 加载启用备份的 profile
-    const withProfiles: BackupWithProfile[] = await Promise.all(
-      enabled.map(async (backup) => {
-        try {
-          const storage = new GistStorage(backup.token, backup.gistId)
-          const profile = await storage.getUserProfile()
-          return { ...backup, username: profile?.name, avatarUrl: profile?.avatar_url }
-        } catch { return backup }
-      })
-    )
-    setEnabledBackups(withProfiles)
+    const uploadEnabled = await getUploadEnabledBackups()
+    const downloadEnabled = await getDownloadEnabledBackups()
     
-    const lastSyncTimes = enabled.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
+    // 加载启用备份的 profile
+    async function loadProfiles(list: BackupConfig[]): Promise<BackupWithProfile[]> {
+      return Promise.all(
+        list.map(async (backup) => {
+          try {
+            const storage = new GistStorage(backup.token, backup.gistId)
+            const profile = await storage.getUserProfile()
+            return { ...backup, username: profile?.name, avatarUrl: profile?.avatar_url }
+          } catch { return backup }
+        })
+      )
+    }
+    
+    setUploadBackups(await loadProfiles(uploadEnabled))
+    setDownloadBackups(await loadProfiles(downloadEnabled))
+    
+    const allEnabled = backups.filter(b => b.enabled)
+    const lastSyncTimes = allEnabled.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
     if (lastSyncTimes.length > 0) {
       setLastSync(new Date(Math.max(...lastSyncTimes)).toLocaleString())
     }
@@ -89,10 +97,10 @@ function App() {
         return
       }
 
-      if (enabledBackups.length === 0) throw new Error('没有启用的备份')
+      if (uploadBackups.length === 0) throw new Error('没有启用上传的备份')
 
       let successCount = 0, failCount = 0
-      for (const backup of enabledBackups) {
+      for (const backup of uploadBackups) {
         try {
           const storage = new GistStorage(backup.token, backup.gistId)
           const engine = new SyncEngine(storage)
@@ -120,13 +128,13 @@ function App() {
   }
 
   function handlePullClick() {
-    if (enabledBackups.length === 0) {
+    if (downloadBackups.length === 0) {
       setStatus('error')
-      setMessage('没有启用的备份')
+      setMessage('没有启用下载的备份')
       return
     }
-    if (enabledBackups.length === 1) {
-      handlePullFromBackup(enabledBackups[0])
+    if (downloadBackups.length === 1) {
+      handlePullFromBackup(downloadBackups[0])
     } else {
       setShowPullSelect(true)
     }
@@ -171,7 +179,8 @@ function App() {
   }
 
   const isSyncing = status === 'syncing'
-  const enabledCount = enabledBackups.length
+  const uploadCount = uploadBackups.length
+  const downloadCount = downloadBackups.length
 
 
   return (
@@ -233,14 +242,14 @@ function App() {
               </div>
             </div>
 
-            {enabledCount === 0 && (
+            {uploadCount === 0 && downloadCount === 0 && (
               <div className="text-center text-xs text-amber-600 bg-amber-50 rounded-lg py-2 border border-amber-200">
                 没有启用的备份，请先在设置中启用
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={handlePush} disabled={isSyncing || enabledCount === 0} className="flex items-center justify-center gap-2 py-3 bg-sky-400 text-white rounded-lg shadow-sm hover:bg-sky-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={handlePush} disabled={isSyncing || uploadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-sky-400 text-white rounded-lg shadow-sm hover:bg-sky-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSyncing && message.includes('上传') ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
@@ -248,7 +257,7 @@ function App() {
                 )}
                 <span className="text-sm font-medium">上传</span>
               </button>
-              <button onClick={handlePullClick} disabled={isSyncing || enabledCount === 0} className="flex items-center justify-center gap-2 py-3 bg-emerald-400 text-white rounded-lg shadow-sm hover:bg-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={handlePullClick} disabled={isSyncing || downloadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-emerald-400 text-white rounded-lg shadow-sm hover:bg-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSyncing && message.includes('下载') ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
@@ -296,7 +305,7 @@ function App() {
               </button>
             </div>
             <div className="p-2 max-h-60 overflow-y-auto">
-              {enabledBackups.map((backup) => (
+              {downloadBackups.map((backup) => (
                 <button
                   key={backup.id}
                   onClick={() => handlePullFromBackup(backup)}

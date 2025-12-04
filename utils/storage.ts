@@ -3,6 +3,8 @@ export interface BackupConfig {
   id: string
   name: string
   enabled: boolean
+  uploadEnabled: boolean
+  downloadEnabled: boolean
   type: 'gist'
   token: string
   gistId: string | null
@@ -31,6 +33,18 @@ async function saveBackups(backups: BackupConfig[]): Promise<void> {
 export async function getEnabledBackups(): Promise<BackupConfig[]> {
   const backups = await getBackups()
   return backups.filter(b => b.enabled)
+}
+
+// 获取启用上传的备份
+export async function getUploadEnabledBackups(): Promise<BackupConfig[]> {
+  const backups = await getBackups()
+  return backups.filter(b => b.enabled && b.uploadEnabled !== false)
+}
+
+// 获取启用下载的备份
+export async function getDownloadEnabledBackups(): Promise<BackupConfig[]> {
+  const backups = await getBackups()
+  return backups.filter(b => b.enabled && b.downloadEnabled !== false)
 }
 
 // 添加备份
