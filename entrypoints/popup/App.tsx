@@ -21,9 +21,10 @@ function App() {
   const [folderCount, setFolderCount] = useState(0)
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; elapsed?: number } | null>(null)
   const [showPullSelect, setShowPullSelect] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadStatus()
+    loadStatus().finally(() => setIsLoading(false))
     loadBookmarkStats()
   }, [])
 
@@ -242,7 +243,7 @@ function App() {
               </div>
             </div>
 
-            {uploadCount === 0 && downloadCount === 0 && (
+            {!isLoading && uploadCount === 0 && downloadCount === 0 && (
               <div className="text-center text-xs text-amber-600 bg-amber-50 rounded-lg py-2 border border-amber-200">
                 没有启用的备份，请先在设置中启用
               </div>
