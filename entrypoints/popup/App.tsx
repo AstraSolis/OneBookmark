@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, type BackupConfig } from '@/utils/storage'
+import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, getSettings, type BackupConfig } from '@/utils/storage'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
+import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
 import type { SyncStatus } from '@/lib/bookmark/types'
 
 interface BackupWithProfile extends BackupConfig {
@@ -22,6 +23,11 @@ function App() {
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; elapsed?: number } | null>(null)
   const [showPullSelect, setShowPullSelect] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  // 差异预览相关状态
+  const [showDiffPreview, setShowDiffPreview] = useState(false)
+  const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
+  const [diffAction, setDiffAction] = useState<'push' | 'pull' | null>(null)
+  const [pendingPullBackup, setPendingPullBackup] = useState<BackupWithProfile | null>(null)
 
   useEffect(() => {
     loadStatus().finally(() => setIsLoading(false))
@@ -85,21 +91,47 @@ function App() {
   }
 
   async function handlePush() {
+    if (uploadBackups.length === 0) {
+      setStatus('error')
+      setMessage('没有启用上传的备份')
+      return
+    }
+
+    const lockStatus = await getLockStatus()
+    if (lockStatus.locked) {
+      setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
+      setStatus('error')
+      setMessage('有其他操作正在进行')
+      return
+    }
+
+    // 检查是否启用差异预览
+    const settings = await getSettings()
+    if (settings.diffPreviewEnabled && uploadBackups[0].gistId) {
+      try {
+        const storage = new GistStorage(uploadBackups[0].token, uploadBackups[0].gistId)
+        const remoteData = await storage.read()
+        const localBookmarks = await getLocalBookmarks()
+        const remoteBookmarks = remoteData?.bookmarks || []
+        const diff = calculateDiff(remoteBookmarks, localBookmarks)
+        if (diff.hasChanges) {
+          setDiffResult(diff)
+          setDiffAction('push')
+          setShowDiffPreview(true)
+          return
+        }
+      } catch { /* 获取差异失败，继续执行 */ }
+    }
+
+    await executePush()
+  }
+
+  async function executePush() {
     setStatus('syncing')
     setMessage('正在上传...')
     setLockInfo(null)
 
     try {
-      const lockStatus = await getLockStatus()
-      if (lockStatus.locked) {
-        setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
-        setStatus('error')
-        setMessage('有其他操作正在进行')
-        return
-      }
-
-      if (uploadBackups.length === 0) throw new Error('没有启用上传的备份')
-
       let successCount = 0, failCount = 0
       for (const backup of uploadBackups) {
         try {
@@ -143,19 +175,44 @@ function App() {
 
   async function handlePullFromBackup(backup: BackupWithProfile) {
     setShowPullSelect(false)
+
+    const lockStatus = await getLockStatus()
+    if (lockStatus.locked) {
+      setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
+      setStatus('error')
+      setMessage('有其他操作正在进行')
+      return
+    }
+
+    // 检查是否启用差异预览
+    const settings = await getSettings()
+    if (settings.diffPreviewEnabled && backup.gistId) {
+      try {
+        const storage = new GistStorage(backup.token, backup.gistId)
+        const remoteData = await storage.read()
+        if (remoteData) {
+          const localBookmarks = await getLocalBookmarks()
+          const diff = calculateDiff(localBookmarks, remoteData.bookmarks)
+          if (diff.hasChanges) {
+            setDiffResult(diff)
+            setDiffAction('pull')
+            setPendingPullBackup(backup)
+            setShowDiffPreview(true)
+            return
+          }
+        }
+      } catch { /* 获取差异失败，继续执行 */ }
+    }
+
+    await executePullFromBackup(backup)
+  }
+
+  async function executePullFromBackup(backup: BackupWithProfile) {
     setStatus('syncing')
     setMessage('正在下载...')
     setLockInfo(null)
 
     try {
-      const lockStatus = await getLockStatus()
-      if (lockStatus.locked) {
-        setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
-        setStatus('error')
-        setMessage('有其他操作正在进行')
-        return
-      }
-
       const storage = new GistStorage(backup.token, backup.gistId)
       const engine = new SyncEngine(storage)
       const result = await engine.pull()
@@ -173,6 +230,29 @@ function App() {
       setStatus('error')
       setMessage(err instanceof Error ? err.message : '下载失败')
     }
+  }
+
+  // 差异预览确认
+  async function handleDiffConfirm() {
+    setShowDiffPreview(false)
+    setDiffResult(null)
+
+    if (diffAction === 'push') {
+      await executePush()
+    } else if (diffAction === 'pull' && pendingPullBackup) {
+      await executePullFromBackup(pendingPullBackup)
+    }
+
+    setDiffAction(null)
+    setPendingPullBackup(null)
+  }
+
+  // 差异预览取消
+  function handleDiffCancel() {
+    setShowDiffPreview(false)
+    setDiffResult(null)
+    setDiffAction(null)
+    setPendingPullBackup(null)
   }
 
   function openOptions() {
@@ -292,6 +372,61 @@ function App() {
           </div>
         )}
       </div>
+
+      {/* 差异预览弹窗 */}
+      {showDiffPreview && diffResult && (
+        <div className="absolute inset-0 bg-black/50 flex items-end z-50">
+          <div className="w-full bg-white rounded-t-2xl animate-slide-up flex flex-col max-h-[85%]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div>
+                <span className="font-medium text-gray-800">确认{diffAction === 'push' ? '上传' : '下载'}</span>
+                <p className="text-[10px] text-gray-400">{diffAction === 'push' ? '本地书签将覆盖远端' : '远端书签将覆盖本地'}</p>
+              </div>
+              <button onClick={handleDiffCancel} className="p-1 text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* 统计 */}
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 text-[10px]">
+              <span className="text-gray-500">共 {diffResult.added.length + diffResult.removed.length + diffResult.modified.length} 项变更:</span>
+              {diffResult.added.length > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">+{diffResult.added.length}</span>}
+              {diffResult.removed.length > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">-{diffResult.removed.length}</span>}
+              {diffResult.modified.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">~{diffResult.modified.length}</span>}
+            </div>
+            {/* 差异列表 */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-48">
+              {[...diffResult.added, ...diffResult.removed, ...diffResult.modified].map((item, i) => {
+                const displayTitle = item.title || (item.url ? new URL(item.url).hostname : '无标题')
+                return (
+                  <div key={i} className={`p-2 rounded-lg text-xs ${
+                    item.type === 'added' ? 'bg-emerald-50 border border-emerald-200' :
+                    item.type === 'removed' ? 'bg-red-50 border border-red-200' :
+                    'bg-amber-50 border border-amber-200'
+                  }`}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-mono font-bold ${
+                        item.type === 'added' ? 'text-emerald-600' :
+                        item.type === 'removed' ? 'text-red-600' : 'text-amber-600'
+                      }`}>{item.type === 'added' ? '+' : item.type === 'removed' ? '-' : '~'}</span>
+                      <span className="font-medium text-gray-800 truncate">{displayTitle}</span>
+                    </div>
+                    {item.url && <div className="text-[10px] text-gray-500 truncate mt-0.5 pl-4">{item.url}</div>}
+                  </div>
+                )
+              })}
+            </div>
+            {/* 按钮 */}
+            <div className="flex gap-2 p-3 border-t border-gray-100">
+              <button onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">取消</button>
+              <button onClick={handleDiffConfirm} className={`flex-1 py-2 text-sm text-white rounded-lg transition-colors ${
+                diffAction === 'push' ? 'bg-sky-400 hover:bg-sky-500' : 'bg-emerald-400 hover:bg-emerald-500'
+              }`}>确认{diffAction === 'push' ? '上传' : '下载'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 下载选择弹窗 */}
       {showPullSelect && (

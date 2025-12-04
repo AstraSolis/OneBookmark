@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getEnabledBackups } from '@/utils/storage'
+import { getEnabledBackups, getSettings, updateSettings } from '@/utils/storage'
 
 export function Settings() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
+  const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
 
   useEffect(() => {
     loadConfig()
@@ -14,6 +15,15 @@ export function Settings() {
     if (times.length > 0) {
       setLastSyncTime(new Date(Math.max(...times)).toLocaleString('zh-CN'))
     }
+
+    const settings = await getSettings()
+    setDiffPreviewEnabled(settings.diffPreviewEnabled)
+  }
+
+  async function handleToggleDiffPreview() {
+    const newValue = !diffPreviewEnabled
+    setDiffPreviewEnabled(newValue)
+    await updateSettings({ diffPreviewEnabled: newValue })
   }
 
   return (
@@ -34,6 +44,19 @@ export function Settings() {
                   <p className="text-xs text-slate-500 mt-0.5">手动上传/下载</p>
                 </div>
                 <span className="px-3 py-1 bg-sky-50 text-sky-600 text-xs rounded-full font-medium">手动</span>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">差异预览</label>
+                  <p className="text-xs text-slate-500 mt-0.5">上传/下载前显示变更内容</p>
+                </div>
+                <button
+                  onClick={handleToggleDiffPreview}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${diffPreviewEnabled ? 'bg-sky-400' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${diffPreviewEnabled ? 'left-6' : 'left-1'}`} />
+                </button>
               </div>
 
               {lastSyncTime && (

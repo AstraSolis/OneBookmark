@@ -12,6 +12,28 @@ export interface BackupConfig {
 }
 
 const CONFIG_KEY = 'onebookmark_backups'
+const SETTINGS_KEY = 'onebookmark_settings'
+
+// 应用设置
+export interface AppSettings {
+  diffPreviewEnabled: boolean
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  diffPreviewEnabled: false
+}
+
+// 获取设置
+export async function getSettings(): Promise<AppSettings> {
+  const result = await browser.storage.local.get(SETTINGS_KEY)
+  return { ...DEFAULT_SETTINGS, ...result[SETTINGS_KEY] }
+}
+
+// 更新设置
+export async function updateSettings(updates: Partial<AppSettings>): Promise<void> {
+  const current = await getSettings()
+  await browser.storage.local.set({ [SETTINGS_KEY]: { ...current, ...updates } })
+}
 
 // 生成唯一 ID
 function generateId(): string {

@@ -7,10 +7,13 @@ import {
   updateBackup,
   deleteBackup,
   toggleBackup,
+  getSettings,
   type BackupConfig
 } from '@/utils/storage'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, isLocked } from '@/lib/sync'
+import { getLocalBookmarks } from '@/lib/bookmark/parser'
+import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -26,6 +29,11 @@ export function Dashboard() {
   const [editingBackup, setEditingBackup] = useState<BackupConfig | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [batchSyncing, setBatchSyncing] = useState<'push' | 'pull' | null>(null)
+  // 差异预览相关状态
+  const [showDiffModal, setShowDiffModal] = useState(false)
+  const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
+  const [diffAction, setDiffAction] = useState<'push' | 'pull' | null>(null)
+  const [pendingPullBackup, setPendingPullBackup] = useState<BackupWithProfile | null>(null)
 
   useEffect(() => {
     loadBackups()
@@ -144,6 +152,33 @@ export function Dashboard() {
       return
     }
 
+    // 检查是否启用差异预览
+    const settings = await getSettings()
+    if (settings.diffPreviewEnabled && enabled[0].gistId) {
+      try {
+        const storage = new GistStorage(enabled[0].token, enabled[0].gistId)
+        const remoteData = await storage.read()
+        const localBookmarks = await getLocalBookmarks()
+        const remoteBookmarks = remoteData?.bookmarks || []
+        // 上传：远端将被本地覆盖，所以 source=远端, target=本地
+        const diff = calculateDiff(remoteBookmarks, localBookmarks)
+        if (diff.hasChanges) {
+          setDiffResult(diff)
+          setDiffAction('push')
+          setShowDiffModal(true)
+          return
+        }
+      } catch {
+        // 获取差异失败，继续执行上传
+      }
+    }
+
+    await executeBatchPush()
+  }
+
+  // 执行批量上传
+  async function executeBatchPush() {
+    const enabled = await getUploadEnabledBackups()
     setBatchSyncing('push')
     let successCount = 0
     let failCount = 0
@@ -196,6 +231,35 @@ export function Dashboard() {
     }
 
     setShowPullModal(false)
+
+    // 检查是否启用差异预览
+    const settings = await getSettings()
+    if (settings.diffPreviewEnabled && backup.gistId) {
+      try {
+        const storage = new GistStorage(backup.token, backup.gistId)
+        const remoteData = await storage.read()
+        if (remoteData) {
+          const localBookmarks = await getLocalBookmarks()
+          // 下载：本地将被远端覆盖，所以 source=本地, target=远端
+          const diff = calculateDiff(localBookmarks, remoteData.bookmarks)
+          if (diff.hasChanges) {
+            setDiffResult(diff)
+            setDiffAction('pull')
+            setPendingPullBackup(backup)
+            setShowDiffModal(true)
+            return
+          }
+        }
+      } catch {
+        // 获取差异失败，继续执行下载
+      }
+    }
+
+    await executePullFromBackup(backup)
+  }
+
+  // 执行下载
+  async function executePullFromBackup(backup: BackupWithProfile) {
     setBatchSyncing('pull')
 
     try {
@@ -214,6 +278,29 @@ export function Dashboard() {
 
     setBatchSyncing(null)
     await loadBackups()
+  }
+
+  // 差异预览确认
+  async function handleDiffConfirm() {
+    setShowDiffModal(false)
+    setDiffResult(null)
+
+    if (diffAction === 'push') {
+      await executeBatchPush()
+    } else if (diffAction === 'pull' && pendingPullBackup) {
+      await executePullFromBackup(pendingPullBackup)
+    }
+
+    setDiffAction(null)
+    setPendingPullBackup(null)
+  }
+
+  // 差异预览取消
+  function handleDiffCancel() {
+    setShowDiffModal(false)
+    setDiffResult(null)
+    setDiffAction(null)
+    setPendingPullBackup(null)
   }
 
   const enabledCount = backups.filter(b => b.enabled).length
@@ -307,6 +394,13 @@ export function Dashboard() {
         backups={backups.filter(b => b.enabled && b.downloadEnabled !== false)}
         onClose={() => setShowPullModal(false)}
         onSelect={handlePullFromBackup}
+      />
+      <DiffPreviewModal
+        isOpen={showDiffModal}
+        diff={diffResult}
+        action={diffAction}
+        onConfirm={handleDiffConfirm}
+        onCancel={handleDiffCancel}
       />
     </div>
   )
@@ -731,6 +825,144 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
         </div>
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
           <p className="text-xs text-slate-400 text-center">选择一个备份源下载，将覆盖本地书签</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 差异预览弹窗
+interface DiffPreviewModalProps {
+  isOpen: boolean
+  diff: DiffResult | null
+  action: 'push' | 'pull' | null
+  onConfirm: () => void
+  onCancel: () => void
+}
+
+function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPreviewModalProps) {
+  const [isClosing, setIsClosing] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) setIsClosing(false)
+  }, [isOpen])
+
+  function handleClose() {
+    setIsClosing(true)
+    setTimeout(() => onCancel(), 200)
+  }
+
+  if (!isOpen || !diff) return null
+
+  const totalChanges = diff.added.length + diff.removed.length + diff.modified.length
+  const actionText = action === 'push' ? '上传' : '下载'
+  const actionDesc = action === 'push' ? '本地书签将覆盖远端' : '远端书签将覆盖本地'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
+      <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800">确认{actionText}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
+          </div>
+          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* 统计信息 */}
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
+          <span className="text-sm text-slate-600">共 {totalChanges} 项变更:</span>
+          {diff.added.length > 0 && (
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length} 新增</span>
+          )}
+          {diff.removed.length > 0 && (
+            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length} 删除</span>
+          )}
+          {diff.modified.length > 0 && (
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length} 修改</span>
+          )}
+        </div>
+
+        {/* 差异列表 */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {diff.added.map((item, i) => (
+            <DiffItemRow key={`add-${i}`} item={item} />
+          ))}
+          {diff.removed.map((item, i) => (
+            <DiffItemRow key={`rm-${i}`} item={item} />
+          ))}
+          {diff.modified.map((item, i) => (
+            <DiffItemRow key={`mod-${i}`} item={item} />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+          <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-all shadow-lg ${
+              action === 'push'
+                ? 'bg-sky-400 hover:bg-sky-500 shadow-sky-200'
+                : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
+            }`}
+          >
+            确认{actionText}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// 差异项行
+function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem }) {
+  const bgColor = item.type === 'added' ? 'bg-emerald-50 border-emerald-200' :
+                  item.type === 'removed' ? 'bg-red-50 border-red-200' :
+                  'bg-amber-50 border-amber-200'
+  const textColor = item.type === 'added' ? 'text-emerald-700' :
+                    item.type === 'removed' ? 'text-red-700' :
+                    'text-amber-700'
+  const icon = item.type === 'added' ? '+' : item.type === 'removed' ? '-' : '~'
+
+  // 当 title 为空时，使用 URL 的域名或显示"无标题"
+  function getDisplayTitle(title: string | undefined, url: string | undefined): string {
+    if (title) return title
+    if (url) {
+      try {
+        return new URL(url).hostname
+      } catch {
+        return '无标题'
+      }
+    }
+    return '无标题'
+  }
+
+  const displayTitle = getDisplayTitle(item.title, item.url)
+
+  return (
+    <div className={`p-3 rounded-lg border ${bgColor}`}>
+      <div className="flex items-start gap-2">
+        <span className={`font-mono font-bold ${textColor}`}>{icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-slate-800 truncate">{displayTitle}</span>
+            {item.path.length > 0 && (
+              <span className="text-xs text-slate-400 truncate">({item.path.join(' / ')})</span>
+            )}
+          </div>
+          {item.url && (
+            <div className="text-xs text-slate-500 truncate mt-0.5">{item.url}</div>
+          )}
+          {item.type === 'modified' && item.oldTitle && (
+            <div className="text-xs text-red-400 line-through truncate mt-0.5">原标题: {item.oldTitle || '无标题'}</div>
+          )}
         </div>
       </div>
     </div>
