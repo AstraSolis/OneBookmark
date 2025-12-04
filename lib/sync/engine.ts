@@ -2,7 +2,6 @@ import type { SyncResult, BookmarkNode } from '../bookmark/types'
 import type { StorageBackend } from '../storage/interface'
 import { getLocalBookmarks, createSyncData } from '../bookmark/parser'
 import { writeBookmarks } from '../bookmark/writer'
-import { saveConfig } from '@/utils/storage'
 import { withLock } from './lock'
 
 // 同步引擎（仅支持手动上传/下载）
@@ -23,7 +22,6 @@ export class SyncEngine {
         const syncData = createSyncData(localBookmarks)
 
         await this.storage.write(syncData)
-        await saveConfig({ lastSyncTime: Date.now() })
 
         console.log('[Sync] Push 完成，书签数:', localBookmarks.length)
         return { success: true as const, changes: countBookmarks(localBookmarks) }
@@ -47,7 +45,6 @@ export class SyncEngine {
         }
 
         const count = await writeBookmarks(data.bookmarks)
-        await saveConfig({ lastSyncTime: Date.now() })
 
         console.log('[Sync] Pull 完成，变更数:', count)
         return { success: true as const, changes: count }

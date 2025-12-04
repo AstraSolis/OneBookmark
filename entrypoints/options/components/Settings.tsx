@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getConfig } from '@/utils/storage'
+import { getEnabledBackups } from '@/utils/storage'
 
 export function Settings() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
@@ -9,8 +9,11 @@ export function Settings() {
   }, [])
 
   async function loadConfig() {
-    const config = await getConfig()
-    setLastSyncTime(config.lastSyncTime ? new Date(config.lastSyncTime).toLocaleString('zh-CN') : null)
+    const backups = await getEnabledBackups()
+    const times = backups.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
+    if (times.length > 0) {
+      setLastSyncTime(new Date(Math.max(...times)).toLocaleString('zh-CN'))
+    }
   }
 
   return (
