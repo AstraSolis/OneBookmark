@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getEnabledBackups, getSettings, updateSettings } from '@/utils/storage'
+import { LanguageCards } from '@/lib/i18n/LanguageCards'
 
 export function Settings() {
+  const { t, i18n } = useTranslation()
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
 
   useEffect(() => {
     loadConfig()
-  }, [])
+  }, [i18n.language])
 
   async function loadConfig() {
     const backups = await getEnabledBackups()
     const times = backups.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
     if (times.length > 0) {
-      setLastSyncTime(new Date(Math.max(...times)).toLocaleString('zh-CN'))
+      setLastSyncTime(new Date(Math.max(...times)).toLocaleString(i18n.language))
     }
 
     const settings = await getSettings()
@@ -29,27 +32,27 @@ export function Settings() {
   return (
     <div className="flex-1 p-8 overflow-auto animate-fade-in relative z-10">
       <div className="w-full">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 tracking-tight">设置</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 tracking-tight">{t('settings.title')}</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 同步信息 */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden animate-slide-up" style={{ animationDelay: '0.1s' }}>
             <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-medium text-gray-800">同步信息</h2>
+              <h2 className="font-medium text-gray-800">{t('settings.syncInfo')}</h2>
             </div>
             <div className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">同步模式</label>
-                  <p className="text-xs text-slate-500 mt-0.5">手动上传/下载</p>
+                  <label className="block text-sm font-medium text-slate-700">{t('settings.syncMode')}</label>
+                  <p className="text-xs text-slate-500 mt-0.5">{t('settings.syncModeDesc')}</p>
                 </div>
-                <span className="px-3 py-1 bg-sky-50 text-sky-600 text-xs rounded-full font-medium">手动</span>
+                <span className="px-3 py-1 bg-sky-50 text-sky-600 text-xs rounded-full font-medium">{t('settings.manual')}</span>
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700">差异预览</label>
-                  <p className="text-xs text-slate-500 mt-0.5">上传/下载前显示变更内容</p>
+                  <label className="block text-sm font-medium text-slate-700">{t('settings.diffPreview')}</label>
+                  <p className="text-xs text-slate-500 mt-0.5">{t('settings.diffPreviewDesc')}</p>
                 </div>
                 <button
                   onClick={handleToggleDiffPreview}
@@ -62,21 +65,35 @@ export function Settings() {
               {lastSyncTime && (
                 <div className="pt-2 border-t border-gray-100">
                   <p className="text-xs text-slate-500">
-                    上次同步: {lastSyncTime}
+                    {t('popup.lastSync')}: {lastSyncTime}
                   </p>
                 </div>
               )}
             </div>
           </section>
 
-          {/* 关于 */}
+          {/* 语言 */}
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden animate-slide-up" style={{ animationDelay: '0.15s' }}>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-medium text-gray-800">{t('settings.language')}</h2>
+            </div>
+            <div className="p-5">
+              <div>
+                <label className="block text-sm font-medium text-slate-700">{t('settings.displayLanguage')}</label>
+                <p className="text-xs text-slate-500 mt-0.5">{t('settings.displayLanguageDesc')}</p>
+              </div>
+              <LanguageCards />
+            </div>
+          </section>
+
+          {/* 关于 */}
+          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 overflow-hidden animate-slide-up lg:col-span-2" style={{ animationDelay: '0.2s' }}>
             <div className="px-5 py-4 border-b border-slate-100">
-              <h2 className="font-medium text-gray-800">关于</h2>
+              <h2 className="font-medium text-gray-800">{t('settings.about')}</h2>
             </div>
             <div className="p-5">
               <p className="text-sm text-slate-600 mb-4">
-                OneBookmark 是一个跨浏览器书签同步工具，支持手动上传和下载书签到 GitHub Gist。
+                {t('settings.aboutDesc')}
               </p>
               <a
                 href="https://github.com/AstraSolis/OneBookmark"
@@ -84,7 +101,7 @@ export function Settings() {
                 rel="noopener noreferrer"
                 className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
               >
-                GitHub 仓库 →
+                GitHub →
               </a>
             </div>
           </section>

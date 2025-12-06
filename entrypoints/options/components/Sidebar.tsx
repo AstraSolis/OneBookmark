@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { DashboardIcon, SettingsIcon } from './Icons'
 
 interface SidebarProps {
@@ -6,9 +7,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
+  const { t } = useTranslation()
   const navItems = [
-    { id: 'dashboard' as const, label: '仪表盘', icon: DashboardIcon },
-    { id: 'settings' as const, label: '设置', icon: SettingsIcon },
+    { id: 'dashboard' as const, label: t('dashboard.title'), icon: DashboardIcon },
+    { id: 'settings' as const, label: t('settings.title'), icon: SettingsIcon },
   ]
 
   return (
@@ -17,7 +19,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <div className="px-5 py-6">
         <div className="flex items-center gap-3">
           <img src="/icon/48.png" alt="Logo" className="w-9 h-9 rounded-xl" />
-          <span className="font-bold text-lg text-gray-800 tracking-tight">OneBookmark</span>
+          <span className="font-bold text-lg text-gray-800 tracking-tight">{t('common.appName')}</span>
         </div>
       </div>
 

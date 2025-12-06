@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   getBackups,
   getUploadEnabledBackups,
@@ -22,6 +23,7 @@ interface BackupWithProfile extends BackupConfig {
 }
 
 export function Dashboard() {
+  const { t } = useTranslation()
   const [backups, setBackups] = useState<BackupWithProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -80,13 +82,13 @@ export function Dashboard() {
   }
 
   async function handleDeleteBackup(id: string) {
-    if (!confirm('确定要删除此备份配置吗？')) return
+    if (!confirm(t('dashboard.confirmDelete'))) return
     try {
       await deleteBackup(id)
       await loadBackups()
-      setMessage({ type: 'success', text: '备份配置已删除' })
+      setMessage({ type: 'success', text: t('dashboard.backupDeleted') })
     } catch {
-      setMessage({ type: 'error', text: '删除失败' })
+      setMessage({ type: 'error', text: t('dashboard.deleteFailed') })
     }
   }
 
@@ -119,7 +121,7 @@ export function Dashboard() {
           token: data.token,
           gistId: data.gistId || null
         })
-        setMessage({ type: 'success', text: '备份配置已更新' })
+        setMessage({ type: 'success', text: t('dashboard.backupUpdated') })
       } else {
         await addBackup({
           name: data.name || 'GitHub Gist',
@@ -131,12 +133,12 @@ export function Dashboard() {
           gistId: data.gistId || null,
           lastSyncTime: null
         })
-        setMessage({ type: 'success', text: '备份配置已添加' })
+        setMessage({ type: 'success', text: t('dashboard.backupAdded') })
       }
       await loadBackups()
       setShowModal(false)
     } catch {
-      setMessage({ type: 'error', text: '保存失败' })
+      setMessage({ type: 'error', text: t('dashboard.saveFailed') })
     }
   }
 
@@ -144,11 +146,11 @@ export function Dashboard() {
   async function handleBatchPush() {
     const enabled = await getUploadEnabledBackups()
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: '没有启用上传的备份' })
+      setMessage({ type: 'error', text: t('popup.noUploadBackup') })
       return
     }
     if (await isLocked()) {
-      setMessage({ type: 'error', text: '有其他操作正在进行' })
+      setMessage({ type: 'error', text: t('popup.operationLocked') })
       return
     }
 
@@ -207,9 +209,9 @@ export function Dashboard() {
     setBatchSyncing(null)
     await loadBackups()
     if (failCount === 0) {
-      setMessage({ type: 'success', text: `已上传到 ${successCount} 个备份` })
+      setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: successCount }) })
     } else {
-      setMessage({ type: 'error', text: `${successCount} 个成功，${failCount} 个失败` })
+      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: successCount, fail: failCount }) })
     }
   }
 
@@ -217,7 +219,7 @@ export function Dashboard() {
   function handleBatchPull() {
     const enabled = backups.filter(b => b.enabled && b.downloadEnabled !== false)
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: '没有启用下载的备份' })
+      setMessage({ type: 'error', text: t('popup.noDownloadBackup') })
       return
     }
     setShowPullModal(true)
@@ -226,7 +228,7 @@ export function Dashboard() {
   // 从指定备份下载
   async function handlePullFromBackup(backup: BackupWithProfile) {
     if (await isLocked()) {
-      setMessage({ type: 'error', text: '有其他操作正在进行' })
+      setMessage({ type: 'error', text: t('popup.operationLocked') })
       return
     }
 
@@ -268,12 +270,12 @@ export function Dashboard() {
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
-        setMessage({ type: 'success', text: '下载成功' })
+        setMessage({ type: 'success', text: t('popup.downloadSuccess') })
       } else {
-        setMessage({ type: 'error', text: '下载失败' })
+        setMessage({ type: 'error', text: t('popup.downloadFailed') })
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : '下载失败' })
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('popup.downloadFailed') })
     }
 
     setBatchSyncing(null)
@@ -310,9 +312,9 @@ export function Dashboard() {
       <div className="w-full">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">备份列表</h1>
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">{t('dashboard.backupList')}</h1>
             <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
-              {backups.length} 个备份
+              {t('dashboard.backupCount', { count: backups.length })}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -324,7 +326,7 @@ export function Dashboard() {
                   className="flex items-center gap-2 px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-all shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {batchSyncing === 'push' ? <Spinner /> : <UploadIcon />}
-                  上传
+                  {t('popup.upload')}
                 </button>
                 <button
                   onClick={handleBatchPull}
@@ -332,7 +334,7 @@ export function Dashboard() {
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-400 text-white text-sm font-medium rounded-xl hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {batchSyncing === 'pull' ? <Spinner /> : <DownloadIcon />}
-                  下载
+                  {t('popup.download')}
                 </button>
               </>
             )}
@@ -343,7 +345,7 @@ export function Dashboard() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              新建
+              {t('dashboard.newBackup')}
             </button>
           </div>
         </div>
@@ -355,7 +357,7 @@ export function Dashboard() {
         )}
 
         {loading ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">加载中...</div>
+          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">{t('common.loading')}</div>
         ) : backups.length > 0 ? (
           <div className="space-y-3">
             {backups.map((backup) => (
@@ -378,8 +380,8 @@ export function Dashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             </div>
-            <p className="text-slate-600 font-medium">暂无备份配置</p>
-            <p className="text-sm text-slate-400 mt-1">点击「新建」按钮创建你的第一个备份</p>
+            <p className="text-slate-600 font-medium">{t('dashboard.noBackup')}</p>
+            <p className="text-sm text-slate-400 mt-1">{t('dashboard.noBackupHint')}</p>
           </div>
         )}
       </div>
@@ -418,6 +420,7 @@ interface BackupCardProps {
 }
 
 function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate }: BackupCardProps) {
+  const { t } = useTranslation()
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -477,7 +480,7 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onTogg
   }
 
   const lastSync = backup.lastSyncTime
-    ? new Date(backup.lastSyncTime).toLocaleString('zh-CN')
+    ? new Date(backup.lastSyncTime).toLocaleString()
     : null
 
   return (
@@ -495,36 +498,36 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onTogg
             <div className="flex items-center gap-2 mb-1">
               <span className="font-semibold text-slate-800">{backup.name}</span>
               {backup.uploadEnabled !== false && (
-                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">上传</span>
+                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">{t('popup.upload')}</span>
               )}
               {backup.downloadEnabled !== false && (
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium border border-emerald-100">下载</span>
+                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium border border-emerald-100">{t('popup.download')}</span>
               )}
             </div>
             {backup.gistUrl ? (
               <a href={backup.gistUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-500 hover:text-sky-600 hover:underline flex items-center gap-1">
-                查看 Gist
+                {t('dashboard.viewGist')}
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
               </a>
             ) : (
-              <span className="text-sm text-slate-400">未关联 Gist</span>
+              <span className="text-sm text-slate-400">{t('dashboard.noGist')}</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className="text-xs text-slate-400">上次同步</div>
-            <div className="text-sm font-medium text-slate-700">{lastSync || '从未'}</div>
+            <div className="text-xs text-slate-400">{t('dashboard.lastSync')}</div>
+            <div className="text-sm font-medium text-slate-700">{lastSync || t('dashboard.never')}</div>
           </div>
           <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
-            <button onClick={onEdit} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="编辑">
+            <button onClick={onEdit} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title={t('common.edit')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
             </button>
-            <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="删除">
+            <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
@@ -540,12 +543,12 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onTogg
                   <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
                     <button onClick={handlePush} disabled={syncing} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
                       {syncing ? <Spinner /> : <UploadIcon />}
-                      {syncing ? '上传中...' : '上传'}
+                      {syncing ? t('popup.uploading') : t('popup.upload')}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleUpload() }}
                       className={`relative w-8 h-4 rounded-full transition-colors ${backup.uploadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
-                      title={backup.uploadEnabled !== false ? '禁用上传' : '启用上传'}
+                      title={backup.uploadEnabled !== false ? t('dashboard.disableUpload') : t('dashboard.enableUpload')}
                     >
                       <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.uploadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
                     </button>
@@ -553,12 +556,12 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onTogg
                   <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
                     <button onClick={handlePull} disabled={restoring} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
                       {restoring ? <Spinner /> : <DownloadIcon />}
-                      {restoring ? '下载中...' : '下载'}
+                      {restoring ? t('popup.downloading') : t('popup.download')}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleDownload() }}
                       className={`relative w-8 h-4 rounded-full transition-colors ${backup.downloadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
-                      title={backup.downloadEnabled !== false ? '禁用下载' : '启用下载'}
+                      title={backup.downloadEnabled !== false ? t('dashboard.disableDownload') : t('dashboard.enableDownload')}
                     >
                       <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.downloadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
                     </button>
@@ -607,6 +610,7 @@ interface NewBackupModalProps {
 }
 
 function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupModalProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [token, setToken] = useState('')
   const [gistId, setGistId] = useState('')
@@ -640,7 +644,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
 
   async function handleTest() {
     if (!token.trim()) {
-      setTestResult({ success: false, message: '请输入 GitHub PAT' })
+      setTestResult({ success: false, message: t('dashboard.tokenRequired') })
       return
     }
     setTesting(true)
@@ -649,12 +653,12 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
       const storage = new GistStorage(token.trim())
       const profile = await storage.getUserProfile()
       if (profile) {
-        setTestResult({ success: true, message: `认证成功 (用户: ${profile.name})` })
+        setTestResult({ success: true, message: t('dashboard.authSuccess', { name: profile.name }) })
       } else {
-        setTestResult({ success: false, message: 'Token 无效或已过期' })
+        setTestResult({ success: false, message: t('dashboard.tokenInvalid') })
       }
     } catch {
-      setTestResult({ success: false, message: '连接失败，请检查网络' })
+      setTestResult({ success: false, message: t('dashboard.connectionFailed') })
     } finally {
       setTesting(false)
     }
@@ -662,7 +666,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
 
   async function handleSubmit() {
     if (!token.trim()) {
-      setTestResult({ success: false, message: '请输入 GitHub PAT' })
+      setTestResult({ success: false, message: t('dashboard.tokenRequired') })
       return
     }
     setCreating(true)
@@ -670,7 +674,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
       const storage = new GistStorage(token.trim())
       const profile = await storage.getUserProfile()
       if (!profile) {
-        setTestResult({ success: false, message: 'Token 无效或已过期' })
+        setTestResult({ success: false, message: t('dashboard.tokenInvalid') })
         return
       }
       onSubmit({
@@ -679,7 +683,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
         gistId: gistId.trim()
       })
     } catch {
-      setTestResult({ success: false, message: '验证失败' })
+      setTestResult({ success: false, message: t('dashboard.verifyFailed') })
     } finally {
       setCreating(false)
     }
@@ -692,7 +696,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
       <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
       <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? '编辑备份' : '新建备份'}</h3>
+          <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? t('dashboard.editBackup') : t('dashboard.newBackup')}</h3>
           <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -701,7 +705,7 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">备份名称</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupName')}</label>
             <input
               ref={inputRef}
               type="text"
@@ -712,11 +716,11 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">备份方法</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupMethod')}</label>
             <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-slate-800">GitHub Gist</div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Personal Access Token <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.token')} <span className="text-red-500">*</span></label>
             <input
               type="password"
               value={token}
@@ -725,22 +729,22 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
             />
             <p className="mt-1.5 text-xs text-slate-400">
-              需要 gist 权限。
-              <a href="https://github.com/settings/tokens/new?scopes=gist&description=OneBookmark" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">创建 Token →</a>
+              {t('dashboard.tokenHint')}
+              <a href="https://github.com/settings/tokens/new?scopes=gist&description=OneBookmark" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.createToken')}</a>
             </p>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Gist ID</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.gistId')}</label>
             <input
               type="text"
               value={gistId}
               onChange={(e) => setGistId(e.target.value)}
-              placeholder="留空则自动创建新 Gist"
+              placeholder={t('dashboard.gistIdPlaceholder')}
               className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
             />
             <p className="mt-1.5 text-xs text-slate-400">
-              可选，留空将在首次上传时自动创建。
-              <a href="https://gist.github.com/" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">查看我的 Gist →</a>
+              {t('dashboard.gistIdHint')}
+              <a href="https://gist.github.com/" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.viewMyGist')}</a>
             </p>
           </div>
           {testResult && (
@@ -749,12 +753,12 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
         </div>
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
           <button onClick={handleTest} disabled={testing} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
-            {testing ? '测试中...' : '测试连接'}
+            {testing ? t('dashboard.testing') : t('dashboard.testConnection')}
           </button>
           <div className="flex gap-3">
-            <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">取消</button>
+            <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">{t('common.cancel')}</button>
             <button onClick={handleSubmit} disabled={creating || !token.trim()} className="px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-all shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
-              {creating ? '保存中...' : (editingBackup ? '保存' : '创建')}
+              {creating ? t('dashboard.saving') : (editingBackup ? t('common.save') : t('dashboard.create'))}
             </button>
           </div>
         </div>
@@ -772,6 +776,7 @@ interface PullSelectModalProps {
 }
 
 function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModalProps) {
+  const { t } = useTranslation()
   const [isClosing, setIsClosing] = useState(false)
 
   useEffect(() => {
@@ -790,7 +795,7 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
       <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
       <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800">选择下载源</h3>
+          <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
           <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -815,8 +820,8 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
                 <div className="font-medium text-slate-800 truncate">{backup.name}</div>
                 <div className="text-xs text-slate-400">
                   {backup.lastSyncTime
-                    ? `上次同步: ${new Date(backup.lastSyncTime).toLocaleString('zh-CN')}`
-                    : '从未同步'}
+                    ? `${t('dashboard.lastSync')}: ${new Date(backup.lastSyncTime).toLocaleString()}`
+                    : t('popup.neverSynced')}
                 </div>
               </div>
               <DownloadIcon />
@@ -824,7 +829,7 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
           ))}
         </div>
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <p className="text-xs text-slate-400 text-center">选择一个备份源下载，将覆盖本地书签</p>
+          <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
         </div>
       </div>
     </div>
@@ -841,6 +846,7 @@ interface DiffPreviewModalProps {
 }
 
 function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPreviewModalProps) {
+  const { t } = useTranslation()
   const [isClosing, setIsClosing] = useState(false)
 
   useEffect(() => {
@@ -855,8 +861,8 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
   if (!isOpen || !diff) return null
 
   const totalChanges = diff.added.length + diff.removed.length + diff.modified.length
-  const actionText = action === 'push' ? '上传' : '下载'
-  const actionDesc = action === 'push' ? '本地书签将覆盖远端' : '远端书签将覆盖本地'
+  const actionText = action === 'push' ? t('popup.upload') : t('popup.download')
+  const actionDesc = action === 'push' ? t('popup.uploadOverwrite') : t('popup.downloadOverwrite')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -864,7 +870,7 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
       <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h3 className="text-lg font-semibold text-slate-800">确认{actionText}</h3>
+            <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
             <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
           </div>
           <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
@@ -876,15 +882,15 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
 
         {/* 统计信息 */}
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
-          <span className="text-sm text-slate-600">共 {totalChanges} 项变更:</span>
+          <span className="text-sm text-slate-600">{t('popup.totalChanges', { count: totalChanges })}:</span>
           {diff.added.length > 0 && (
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length} 新增</span>
+            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length}</span>
           )}
           {diff.removed.length > 0 && (
-            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length} 删除</span>
+            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length}</span>
           )}
           {diff.modified.length > 0 && (
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length} 修改</span>
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length}</span>
           )}
         </div>
 
@@ -903,7 +909,7 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
 
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
           <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
@@ -913,7 +919,7 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
                 : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
             }`}
           >
-            确认{actionText}
+            {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
           </button>
         </div>
       </div>
@@ -923,6 +929,7 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
 
 // 差异项行
 function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem }) {
+  const { t } = useTranslation()
   const bgColor = item.type === 'added' ? 'bg-emerald-50 border-emerald-200' :
                   item.type === 'removed' ? 'bg-red-50 border-red-200' :
                   'bg-amber-50 border-amber-200'
@@ -938,10 +945,10 @@ function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem })
       try {
         return new URL(url).hostname
       } catch {
-        return '无标题'
+        return t('dashboard.noTitle')
       }
     }
-    return '无标题'
+    return t('dashboard.noTitle')
   }
 
   const displayTitle = getDisplayTitle(item.title, item.url)
@@ -961,7 +968,7 @@ function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem })
             <div className="text-xs text-slate-500 truncate mt-0.5">{item.url}</div>
           )}
           {item.type === 'modified' && item.oldTitle && (
-            <div className="text-xs text-red-400 line-through truncate mt-0.5">原标题: {item.oldTitle || '无标题'}</div>
+            <div className="text-xs text-red-400 line-through truncate mt-0.5">{t('dashboard.originalTitle')}: {item.oldTitle || t('dashboard.noTitle')}</div>
           )}
         </div>
       </div>

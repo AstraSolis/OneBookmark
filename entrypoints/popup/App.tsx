@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, getSettings, type BackupConfig } from '@/utils/storage'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
@@ -86,14 +87,14 @@ function App() {
   async function handleForceUnlock() {
     await forceReleaseLock()
     setLockInfo(null)
-    setMessage('已强制解锁')
+    setMessage(t('popup.unlocked'))
     setStatus('idle')
   }
 
   async function handlePush() {
     if (uploadBackups.length === 0) {
       setStatus('error')
-      setMessage('没有启用上传的备份')
+      setMessage(t('popup.noUploadBackup'))
       return
     }
 
@@ -101,7 +102,7 @@ function App() {
     if (lockStatus.locked) {
       setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
       setStatus('error')
-      setMessage('有其他操作正在进行')
+      setMessage(t('popup.operationLocked'))
       return
     }
 
@@ -128,7 +129,7 @@ function App() {
 
   async function executePush() {
     setStatus('syncing')
-    setMessage('正在上传...')
+    setMessage(t('popup.uploading'))
     setLockInfo(null)
 
     try {
@@ -148,22 +149,22 @@ function App() {
 
       if (failCount === 0) {
         setStatus('success')
-        setMessage(`已上传到 ${successCount} 个备份`)
+        setMessage(t('popup.uploadSuccess', { count: successCount }))
       } else if (successCount > 0) {
         setStatus('success')
-        setMessage(`${successCount} 个成功，${failCount} 个失败`)
-      } else throw new Error('所有备份上传失败')
+        setMessage(t('popup.partialSuccess', { success: successCount, fail: failCount }))
+      } else throw new Error(t('popup.allUploadFailed'))
       await loadStatus()
     } catch (err) {
       setStatus('error')
-      setMessage(err instanceof Error ? err.message : '上传失败')
+      setMessage(err instanceof Error ? err.message : t('popup.uploadFailed'))
     }
   }
 
   function handlePullClick() {
     if (downloadBackups.length === 0) {
       setStatus('error')
-      setMessage('没有启用下载的备份')
+      setMessage(t('popup.noDownloadBackup'))
       return
     }
     if (downloadBackups.length === 1) {
@@ -180,7 +181,7 @@ function App() {
     if (lockStatus.locked) {
       setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
       setStatus('error')
-      setMessage('有其他操作正在进行')
+      setMessage(t('popup.operationLocked'))
       return
     }
 
@@ -209,7 +210,7 @@ function App() {
 
   async function executePullFromBackup(backup: BackupWithProfile) {
     setStatus('syncing')
-    setMessage('正在下载...')
+    setMessage(t('popup.downloading'))
     setLockInfo(null)
 
     try {
@@ -220,15 +221,15 @@ function App() {
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
         setStatus('success')
-        setMessage('下载成功')
+        setMessage(t('popup.downloadSuccess'))
         await loadStatus()
         setTimeout(() => loadBookmarkStats(), 500)
       } else {
-        throw new Error('下载失败')
+        throw new Error(t('popup.downloadFailed'))
       }
     } catch (err) {
       setStatus('error')
-      setMessage(err instanceof Error ? err.message : '下载失败')
+      setMessage(err instanceof Error ? err.message : t('popup.downloadFailed'))
     }
   }
 
@@ -259,6 +260,7 @@ function App() {
     browser.tabs.create({ url: browser.runtime.getURL('/options.html') })
   }
 
+  const { t } = useTranslation()
   const isSyncing = status === 'syncing'
   const uploadCount = uploadBackups.length
   const downloadCount = downloadBackups.length
@@ -271,11 +273,11 @@ function App() {
         <div className="flex items-center gap-2.5">
           <img src="/icon/48.png" alt="Logo" className="w-7 h-7 rounded" />
           <div>
-            <h1 className="text-sm font-bold text-gray-900 leading-none">OneBookmark</h1>
-            <p className="text-[10px] font-medium text-gray-500 mt-0.5">跨浏览器书签同步</p>
+            <h1 className="text-sm font-bold text-gray-900 leading-none">{t('common.appName')}</h1>
+            <p className="text-[10px] font-medium text-gray-500 mt-0.5">{t('common.appDesc')}</p>
           </div>
         </div>
-        <button onClick={openOptions} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-all" title="设置">
+        <button onClick={openOptions} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-all" title={t('common.settings')}>
           <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -292,10 +294,10 @@ function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">欢迎使用</h3>
-            <p className="text-xs text-gray-500 mb-3 px-4">请先配置备份以开始同步</p>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">{t('popup.welcome')}</h3>
+            <p className="text-xs text-gray-500 mb-3 px-4">{t('popup.configFirst')}</p>
             <button onClick={openOptions} className="px-5 py-1.5 bg-sky-400 hover:bg-sky-500 text-white text-xs font-medium rounded-md transition-all shadow-sm active:scale-95">
-              前往设置
+              {t('popup.goSettings')}
             </button>
           </div>
         ) : (
@@ -307,7 +309,7 @@ function App() {
                     <svg className="w-4 h-4 text-sky-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                     </svg>
-                    <span className="text-xs text-gray-500">书签</span>
+                    <span className="text-xs text-gray-500">{t('popup.bookmarks')}</span>
                   </div>
                   <p className="text-2xl font-bold text-gray-800">{bookmarkCount}</p>
                 </div>
@@ -316,7 +318,7 @@ function App() {
                     <svg className="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                     </svg>
-                    <span className="text-xs text-gray-500">文件夹</span>
+                    <span className="text-xs text-gray-500">{t('popup.folders')}</span>
                   </div>
                   <p className="text-2xl font-bold text-gray-800">{folderCount}</p>
                 </div>
@@ -325,26 +327,26 @@ function App() {
 
             {!isLoading && uploadCount === 0 && downloadCount === 0 && (
               <div className="text-center text-xs text-amber-600 bg-amber-50 rounded-lg py-2 border border-amber-200">
-                没有启用的备份，请先在设置中启用
+                {t('popup.noEnabledBackup')}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-2">
               <button onClick={handlePush} disabled={isSyncing || uploadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-sky-400 text-white rounded-lg shadow-sm hover:bg-sky-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                {isSyncing && message.includes('上传') ? (
+                {isSyncing && message.includes(t('popup.uploading')) ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 )}
-                <span className="text-sm font-medium">上传</span>
+                <span className="text-sm font-medium">{t('popup.upload')}</span>
               </button>
               <button onClick={handlePullClick} disabled={isSyncing || downloadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-emerald-400 text-white rounded-lg shadow-sm hover:bg-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
-                {isSyncing && message.includes('下载') ? (
+                {isSyncing && message.includes(t('popup.downloading')) ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 )}
-                <span className="text-sm font-medium">下载</span>
+                <span className="text-sm font-medium">{t('popup.download')}</span>
               </button>
             </div>
 
@@ -359,13 +361,13 @@ function App() {
               {lastSync && (
                 <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  <span>上次同步: {lastSync}</span>
+                  <span>{t('popup.lastSync')}: {lastSync}</span>
                 </div>
               )}
               {lockInfo?.locked && (
                 <div className="flex items-center justify-between px-3 py-2 bg-amber-50 text-amber-700 rounded-lg text-xs border border-amber-200">
-                  <span>操作锁定中 ({Math.round((lockInfo.elapsed || 0) / 1000)}秒)</span>
-                  <button onClick={handleForceUnlock} className="px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-amber-800 font-medium transition-colors">强制解锁</button>
+                  <span>{t('popup.lockDuration', { seconds: Math.round((lockInfo.elapsed || 0) / 1000) })}</span>
+                  <button onClick={handleForceUnlock} className="px-2 py-1 bg-amber-100 hover:bg-amber-200 rounded text-amber-800 font-medium transition-colors">{t('popup.forceUnlock')}</button>
                 </div>
               )}
             </div>
@@ -379,8 +381,8 @@ function App() {
           <div className="w-full bg-white rounded-t-2xl animate-slide-up flex flex-col max-h-[85%]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div>
-                <span className="font-medium text-gray-800">确认{diffAction === 'push' ? '上传' : '下载'}</span>
-                <p className="text-[10px] text-gray-400">{diffAction === 'push' ? '本地书签将覆盖远端' : '远端书签将覆盖本地'}</p>
+                <span className="font-medium text-gray-800">{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</span>
+                <p className="text-[10px] text-gray-400">{diffAction === 'push' ? t('popup.uploadOverwrite') : t('popup.downloadOverwrite')}</p>
               </div>
               <button onClick={handleDiffCancel} className="p-1 text-gray-400 hover:text-gray-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -390,7 +392,7 @@ function App() {
             </div>
             {/* 统计 */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 text-[10px]">
-              <span className="text-gray-500">共 {diffResult.added.length + diffResult.removed.length + diffResult.modified.length} 项变更:</span>
+              <span className="text-gray-500">{t('popup.totalChanges', { count: diffResult.added.length + diffResult.removed.length + diffResult.modified.length })}:</span>
               {diffResult.added.length > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">+{diffResult.added.length}</span>}
               {diffResult.removed.length > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">-{diffResult.removed.length}</span>}
               {diffResult.modified.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">~{diffResult.modified.length}</span>}
@@ -398,7 +400,7 @@ function App() {
             {/* 差异列表 */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-48">
               {[...diffResult.added, ...diffResult.removed, ...diffResult.modified].map((item, i) => {
-                const displayTitle = item.title || (item.url ? new URL(item.url).hostname : '无标题')
+                const displayTitle = item.title || (item.url ? new URL(item.url).hostname : t('dashboard.noTitle'))
                 return (
                   <div key={i} className={`p-2 rounded-lg text-xs ${
                     item.type === 'added' ? 'bg-emerald-50 border border-emerald-200' :
@@ -419,10 +421,10 @@ function App() {
             </div>
             {/* 按钮 */}
             <div className="flex gap-2 p-3 border-t border-gray-100">
-              <button onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">取消</button>
+              <button onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">{t('common.cancel')}</button>
               <button onClick={handleDiffConfirm} className={`flex-1 py-2 text-sm text-white rounded-lg transition-colors ${
                 diffAction === 'push' ? 'bg-sky-400 hover:bg-sky-500' : 'bg-emerald-400 hover:bg-emerald-500'
-              }`}>确认{diffAction === 'push' ? '上传' : '下载'}</button>
+              }`}>{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</button>
             </div>
           </div>
         </div>
@@ -433,7 +435,7 @@ function App() {
         <div className="absolute inset-0 bg-black/50 flex items-end z-50">
           <div className="w-full bg-white rounded-t-2xl animate-slide-up">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <span className="font-medium text-gray-800">选择下载源</span>
+              <span className="font-medium text-gray-800">{t('popup.selectSource')}</span>
               <button onClick={() => setShowPullSelect(false)} className="p-1 text-gray-400 hover:text-gray-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -457,7 +459,7 @@ function App() {
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-gray-800 truncate">{backup.name}</div>
                     <div className="text-[10px] text-gray-400">
-                      {backup.lastSyncTime ? new Date(backup.lastSyncTime).toLocaleString('zh-CN') : '从未同步'}
+                      {backup.lastSyncTime ? new Date(backup.lastSyncTime).toLocaleString() : t('popup.neverSynced')}
                     </div>
                   </div>
                   <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

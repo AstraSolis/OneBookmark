@@ -15,8 +15,10 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "i18next": "^25.7.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-i18next": "^16.4.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",
