@@ -15,6 +15,7 @@ import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, isLocked } from '@/lib/sync'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
+import { FadeInUp, HoverScale, PressScale, AnimatePresence, Overlay, ScaleIn, Switch, motion, springPresets, Skeleton } from '@/lib/motion'
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -308,7 +309,7 @@ export function Dashboard() {
   const enabledCount = backups.filter(b => b.enabled).length
 
   return (
-    <div className="flex-1 p-8 overflow-auto animate-fade-in relative z-10">
+    <FadeInUp className="flex-1 p-8 overflow-auto relative z-10">
       <div className="w-full">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -320,50 +321,73 @@ export function Dashboard() {
           <div className="flex items-center gap-2">
             {backups.length > 0 && (
               <>
-                <button
+                <PressScale
                   onClick={handleBatchPush}
                   disabled={batchSyncing !== null || enabledCount === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-all shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-colors shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {batchSyncing === 'push' ? <Spinner /> : <UploadIcon />}
                   {t('popup.upload')}
-                </button>
-                <button
+                </PressScale>
+                <PressScale
                   onClick={handleBatchPull}
                   disabled={batchSyncing !== null || enabledCount === 0}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-400 text-white text-sm font-medium rounded-xl hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-400 text-white text-sm font-medium rounded-xl hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {batchSyncing === 'pull' ? <Spinner /> : <DownloadIcon />}
                   {t('popup.download')}
-                </button>
+                </PressScale>
               </>
             )}
-            <button
+            <PressScale
               onClick={handleNewBackup}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-300"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white text-sm font-medium rounded-xl hover:bg-slate-800 transition-colors shadow-lg shadow-slate-300"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               {t('dashboard.newBackup')}
-            </button>
+            </PressScale>
           </div>
         </div>
 
-        {message && (
-          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-sky-50 text-sky-600'}`}>
-            {message.text}
-          </div>
-        )}
+        <AnimatePresence>
+          {message && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={springPresets.snappy}
+              className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-sky-50 text-sky-600'}`}
+            >
+              {message.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {loading ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-400">{t('common.loading')}</div>
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4">
+                <Skeleton variant="circle" className="w-12 h-12" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <div className="space-y-1 text-right">
+                  <Skeleton className="h-3 w-16 ml-auto" />
+                  <Skeleton className="h-4 w-28" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : backups.length > 0 ? (
           <div className="space-y-3">
-            {backups.map((backup) => (
+            {backups.map((backup, index) => (
               <BackupCard
                 key={backup.id}
                 backup={backup}
+                index={index}
                 onEdit={() => handleEditBackup(backup)}
                 onDelete={() => handleDeleteBackup(backup.id)}
                 onToggle={() => handleToggleBackup(backup.id)}
@@ -374,15 +398,17 @@ export function Dashboard() {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center shadow-sm hover:shadow-md transition-all duration-300 animate-slide-up">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-50 rounded-2xl flex items-center justify-center">
-              <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-              </svg>
-            </div>
-            <p className="text-slate-600 font-medium">{t('dashboard.noBackup')}</p>
-            <p className="text-sm text-slate-400 mt-1">{t('dashboard.noBackupHint')}</p>
-          </div>
+          <FadeInUp>
+            <HoverScale className="bg-white rounded-2xl border border-gray-100 p-12 text-center shadow-sm">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gray-50 rounded-2xl flex items-center justify-center">
+                <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+              </div>
+              <p className="text-slate-600 font-medium">{t('dashboard.noBackup')}</p>
+              <p className="text-sm text-slate-400 mt-1">{t('dashboard.noBackupHint')}</p>
+            </HoverScale>
+          </FadeInUp>
         )}
       </div>
       <NewBackupModal
@@ -404,13 +430,14 @@ export function Dashboard() {
         onConfirm={handleDiffConfirm}
         onCancel={handleDiffCancel}
       />
-    </div>
+    </FadeInUp>
   )
 }
 
 
 interface BackupCardProps {
   backup: BackupWithProfile
+  index: number
   onEdit: () => void
   onDelete: () => void
   onToggle: () => void
@@ -419,7 +446,7 @@ interface BackupCardProps {
   onUpdate: () => void
 }
 
-function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate }: BackupCardProps) {
+function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate }: BackupCardProps) {
   const { t } = useTranslation()
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -484,95 +511,93 @@ function BackupCard({ backup, onEdit, onDelete, onToggle, onToggleUpload, onTogg
     : null
 
   return (
-    <div className={`bg-white rounded-2xl border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 group animate-slide-up ${backup.enabled ? 'border-gray-100' : 'border-gray-200 opacity-60'} ${showMenu ? 'z-50 relative' : ''}`}>
-      <div className="p-5 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl overflow-hidden bg-sky-100 flex-shrink-0 border-2 border-white shadow-sm">
-            {backup.avatarUrl ? (
-              <img src={backup.avatarUrl} alt={backup.username} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold text-lg">G</div>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-slate-800">{backup.name}</span>
-              {backup.uploadEnabled !== false && (
-                <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">{t('popup.upload')}</span>
-              )}
-              {backup.downloadEnabled !== false && (
-                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium border border-emerald-100">{t('popup.download')}</span>
+    <FadeInUp delay={index * 0.05}>
+      <HoverScale className={`bg-white rounded-2xl border shadow-sm ${backup.enabled ? 'border-gray-100' : 'border-gray-200 opacity-60'} ${showMenu ? 'z-50 relative' : ''}`}>
+        <div className="p-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl overflow-hidden bg-sky-100 flex-shrink-0 border-2 border-white shadow-sm">
+              {backup.avatarUrl ? (
+                <img src={backup.avatarUrl} alt={backup.username} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold text-lg">G</div>
               )}
             </div>
-            {backup.gistUrl ? (
-              <a href={backup.gistUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-500 hover:text-sky-600 hover:underline flex items-center gap-1">
-                {t('dashboard.viewGist')}
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            ) : (
-              <span className="text-sm text-slate-400">{t('dashboard.noGist')}</span>
-            )}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-semibold text-slate-800">{backup.name}</span>
+                {backup.uploadEnabled !== false && (
+                  <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">{t('popup.upload')}</span>
+                )}
+                {backup.downloadEnabled !== false && (
+                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-xs rounded-md font-medium border border-emerald-100">{t('popup.download')}</span>
+                )}
+              </div>
+              {backup.gistUrl ? (
+                <a href={backup.gistUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-500 hover:text-sky-600 hover:underline flex items-center gap-1">
+                  {t('dashboard.viewGist')}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              ) : (
+                <span className="text-sm text-slate-400">{t('dashboard.noGist')}</span>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-xs text-slate-400">{t('dashboard.lastSync')}</div>
-            <div className="text-sm font-medium text-slate-700">{lastSync || t('dashboard.never')}</div>
-          </div>
-          <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
-            <button onClick={onEdit} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title={t('common.edit')}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
-            <div className="relative" ref={menuRef}>
-              <button onClick={() => setShowMenu(!showMenu)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <circle cx="12" cy="6" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="18" r="2" />
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-xs text-slate-400">{t('dashboard.lastSync')}</div>
+              <div className="text-sm font-medium text-slate-700">{lastSync || t('dashboard.never')}</div>
+            </div>
+            <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
+              <button onClick={onEdit} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title={t('common.edit')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </button>
-              {showMenu && (
-                <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
-                  <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
-                    <button onClick={handlePush} disabled={syncing} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
-                      {syncing ? <Spinner /> : <UploadIcon />}
-                      {syncing ? t('popup.uploading') : t('popup.upload')}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleUpload() }}
-                      className={`relative w-8 h-4 rounded-full transition-colors ${backup.uploadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
-                      title={backup.uploadEnabled !== false ? t('dashboard.disableUpload') : t('dashboard.enableUpload')}
+              <button onClick={onDelete} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+              <div className="relative" ref={menuRef}>
+                <button onClick={() => setShowMenu(!showMenu)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="6" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="18" r="2" />
+                  </svg>
+                </button>
+                <AnimatePresence>
+                  {showMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                      transition={springPresets.snappy}
+                      className="absolute right-0 top-full mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50"
                     >
-                      <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.uploadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
-                    <button onClick={handlePull} disabled={restoring} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
-                      {restoring ? <Spinner /> : <DownloadIcon />}
-                      {restoring ? t('popup.downloading') : t('popup.download')}
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleDownload() }}
-                      className={`relative w-8 h-4 rounded-full transition-colors ${backup.downloadEnabled !== false ? 'bg-sky-400' : 'bg-gray-300'}`}
-                      title={backup.downloadEnabled !== false ? t('dashboard.disableDownload') : t('dashboard.enableDownload')}
-                    >
-                      <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${backup.downloadEnabled !== false ? 'left-4' : 'left-0.5'}`} />
-                    </button>
-                  </div>
-                </div>
-              )}
+                      <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
+                        <button onClick={handlePush} disabled={syncing} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
+                          {syncing ? <Spinner /> : <UploadIcon />}
+                          {syncing ? t('popup.uploading') : t('popup.upload')}
+                        </button>
+                        <Switch size="sm" enabled={backup.uploadEnabled !== false} onChange={onToggleUpload} />
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2 hover:bg-slate-50">
+                        <button onClick={handlePull} disabled={restoring} className="flex items-center gap-2 text-sm text-slate-700 disabled:opacity-50">
+                          {restoring ? <Spinner /> : <DownloadIcon />}
+                          {restoring ? t('popup.downloading') : t('popup.download')}
+                        </button>
+                        <Switch size="sm" enabled={backup.downloadEnabled !== false} onChange={onToggleDownload} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </HoverScale>
+    </FadeInUp>
   )
 }
 
@@ -617,12 +642,10 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
   const [testing, setTesting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [isClosing, setIsClosing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (isOpen) {
-      setIsClosing(false)
       setTestResult(null)
       if (editingBackup) {
         setName(editingBackup.name || '')
@@ -636,11 +659,6 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
       setTimeout(() => inputRef.current?.focus(), 100)
     }
   }, [isOpen, editingBackup])
-
-  function handleClose() {
-    setIsClosing(true)
-    setTimeout(() => onClose(), 200)
-  }
 
   async function handleTest() {
     if (!token.trim()) {
@@ -689,81 +707,93 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
-      <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? t('dashboard.editBackup') : t('dashboard.newBackup')}</h3>
-          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <Overlay onClick={onClose} />
+          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? t('dashboard.editBackup') : t('dashboard.newBackup')}</h3>
+              <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupName')}</label>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="GitHub Gist"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupMethod')}</label>
+                <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-slate-800">GitHub Gist</div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.token')} <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="ghp_..."
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
+                />
+                <p className="mt-1.5 text-xs text-slate-400">
+                  {t('dashboard.tokenHint')}
+                  <a href="https://github.com/settings/tokens/new?scopes=gist&description=OneBookmark" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.createToken')}</a>
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.gistId')}</label>
+                <input
+                  type="text"
+                  value={gistId}
+                  onChange={(e) => setGistId(e.target.value)}
+                  placeholder={t('dashboard.gistIdPlaceholder')}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
+                />
+                <p className="mt-1.5 text-xs text-slate-400">
+                  {t('dashboard.gistIdHint')}
+                  <a href="https://gist.github.com/" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.viewMyGist')}</a>
+                </p>
+              </div>
+              <AnimatePresence>
+                {testResult && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={springPresets.snappy}
+                    className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-sky-50 text-sky-600' : 'bg-red-50 text-red-600'}`}
+                  >
+                    {testResult.message}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+              <PressScale onClick={handleTest} disabled={testing} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
+                {testing ? t('dashboard.testing') : t('dashboard.testConnection')}
+              </PressScale>
+              <div className="flex gap-3">
+                <PressScale onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">{t('common.cancel')}</PressScale>
+                <PressScale onClick={handleSubmit} disabled={creating || !token.trim()} className="px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-colors shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
+                  {creating ? t('dashboard.saving') : (editingBackup ? t('common.save') : t('dashboard.create'))}
+                </PressScale>
+              </div>
+            </div>
+          </ScaleIn>
         </div>
-        <div className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupName')}</label>
-            <input
-              ref={inputRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="GitHub Gist"
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.backupMethod')}</label>
-            <div className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-slate-800">GitHub Gist</div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.token')} <span className="text-red-500">*</span></label>
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="ghp_..."
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
-            />
-            <p className="mt-1.5 text-xs text-slate-400">
-              {t('dashboard.tokenHint')}
-              <a href="https://github.com/settings/tokens/new?scopes=gist&description=OneBookmark" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.createToken')}</a>
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.gistId')}</label>
-            <input
-              type="text"
-              value={gistId}
-              onChange={(e) => setGistId(e.target.value)}
-              placeholder={t('dashboard.gistIdPlaceholder')}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400 text-sm transition-all"
-            />
-            <p className="mt-1.5 text-xs text-slate-400">
-              {t('dashboard.gistIdHint')}
-              <a href="https://gist.github.com/" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.viewMyGist')}</a>
-            </p>
-          </div>
-          {testResult && (
-            <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-sky-50 text-sky-600' : 'bg-red-50 text-red-600'}`}>{testResult.message}</div>
-          )}
-        </div>
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <button onClick={handleTest} disabled={testing} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">
-            {testing ? t('dashboard.testing') : t('dashboard.testConnection')}
-          </button>
-          <div className="flex gap-3">
-            <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">{t('common.cancel')}</button>
-            <button onClick={handleSubmit} disabled={creating || !token.trim()} className="px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-all shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
-              {creating ? t('dashboard.saving') : (editingBackup ? t('common.save') : t('dashboard.create'))}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -777,62 +807,57 @@ interface PullSelectModalProps {
 
 function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModalProps) {
   const { t } = useTranslation()
-  const [isClosing, setIsClosing] = useState(false)
-
-  useEffect(() => {
-    if (isOpen) setIsClosing(false)
-  }, [isOpen])
-
-  function handleClose() {
-    setIsClosing(true)
-    setTimeout(() => onClose(), 200)
-  }
-
-  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
-      <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
-          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <Overlay onClick={onClose} />
+          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
+              <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+              {backups.map((backup, index) => (
+                <motion.button
+                  key={backup.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...springPresets.gentle, delay: index * 0.05 }}
+                  onClick={() => onSelect(backup)}
+                  className="w-full p-4 bg-slate-50 hover:bg-slate-100 rounded-xl text-left transition-colors flex items-center gap-4"
+                >
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-sky-100 flex-shrink-0">
+                    {backup.avatarUrl ? (
+                      <img src={backup.avatarUrl} alt={backup.username} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold">G</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-slate-800 truncate">{backup.name}</div>
+                    <div className="text-xs text-slate-400">
+                      {backup.lastSyncTime
+                        ? `${t('dashboard.lastSync')}: ${new Date(backup.lastSyncTime).toLocaleString()}`
+                        : t('popup.neverSynced')}
+                    </div>
+                  </div>
+                  <DownloadIcon />
+                </motion.button>
+              ))}
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+              <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
+            </div>
+          </ScaleIn>
         </div>
-        <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
-          {backups.map((backup) => (
-            <button
-              key={backup.id}
-              onClick={() => onSelect(backup)}
-              className="w-full p-4 bg-slate-50 hover:bg-slate-100 rounded-xl text-left transition-colors flex items-center gap-4"
-            >
-              <div className="w-10 h-10 rounded-lg overflow-hidden bg-sky-100 flex-shrink-0">
-                {backup.avatarUrl ? (
-                  <img src={backup.avatarUrl} alt={backup.username} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold">G</div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-slate-800 truncate">{backup.name}</div>
-                <div className="text-xs text-slate-400">
-                  {backup.lastSyncTime
-                    ? `${t('dashboard.lastSync')}: ${new Date(backup.lastSyncTime).toLocaleString()}`
-                    : t('popup.neverSynced')}
-                </div>
-              </div>
-              <DownloadIcon />
-            </button>
-          ))}
-        </div>
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
-        </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -847,88 +872,79 @@ interface DiffPreviewModalProps {
 
 function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPreviewModalProps) {
   const { t } = useTranslation()
-  const [isClosing, setIsClosing] = useState(false)
 
-  useEffect(() => {
-    if (isOpen) setIsClosing(false)
-  }, [isOpen])
-
-  function handleClose() {
-    setIsClosing(true)
-    setTimeout(() => onCancel(), 200)
-  }
-
-  if (!isOpen || !diff) return null
-
-  const totalChanges = diff.added.length + diff.removed.length + diff.modified.length
-  const actionText = action === 'push' ? t('popup.upload') : t('popup.download')
+  const totalChanges = diff ? diff.added.length + diff.removed.length + diff.modified.length : 0
   const actionDesc = action === 'push' ? t('popup.uploadOverwrite') : t('popup.downloadOverwrite')
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className={`absolute inset-0 bg-black/50 ${isClosing ? 'animate-fade-out' : 'animate-fade-in'}`} onClick={handleClose} />
-      <div className={`relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col ${isClosing ? 'animate-zoom-out' : 'animate-zoom-in'}`}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
-          </div>
-          <button onClick={handleClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <AnimatePresence>
+      {isOpen && diff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <Overlay onClick={onCancel} />
+          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
+                <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
+              </div>
+              <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
 
-        {/* 统计信息 */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
-          <span className="text-sm text-slate-600">{t('popup.totalChanges', { count: totalChanges })}:</span>
-          {diff.added.length > 0 && (
-            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length}</span>
-          )}
-          {diff.removed.length > 0 && (
-            <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length}</span>
-          )}
-          {diff.modified.length > 0 && (
-            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length}</span>
-          )}
-        </div>
+            {/* 统计信息 */}
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
+              <span className="text-sm text-slate-600">{t('popup.totalChanges', { count: totalChanges })}:</span>
+              {diff.added.length > 0 && (
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length}</span>
+              )}
+              {diff.removed.length > 0 && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length}</span>
+              )}
+              {diff.modified.length > 0 && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length}</span>
+              )}
+            </div>
 
-        {/* 差异列表 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {diff.added.map((item, i) => (
-            <DiffItemRow key={`add-${i}`} item={item} />
-          ))}
-          {diff.removed.map((item, i) => (
-            <DiffItemRow key={`rm-${i}`} item={item} />
-          ))}
-          {diff.modified.map((item, i) => (
-            <DiffItemRow key={`mod-${i}`} item={item} />
-          ))}
-        </div>
+            {/* 差异列表 */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {diff.added.map((item, i) => (
+                <DiffItemRow key={`add-${i}`} item={item} index={i} />
+              ))}
+              {diff.removed.map((item, i) => (
+                <DiffItemRow key={`rm-${i}`} item={item} index={diff.added.length + i} />
+              ))}
+              {diff.modified.map((item, i) => (
+                <DiffItemRow key={`mod-${i}`} item={item} index={diff.added.length + diff.removed.length + i} />
+              ))}
+            </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-          <button onClick={handleClose} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-            {t('common.cancel')}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-all shadow-lg ${
-              action === 'push'
-                ? 'bg-sky-400 hover:bg-sky-500 shadow-sky-200'
-                : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
-            }`}
-          >
-            {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
-          </button>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+              <PressScale onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                {t('common.cancel')}
+              </PressScale>
+              <PressScale
+                onClick={onConfirm}
+                className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-colors shadow-lg ${
+                  action === 'push'
+                    ? 'bg-sky-400 hover:bg-sky-500 shadow-sky-200'
+                    : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
+                }`}
+              >
+                {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
+              </PressScale>
+            </div>
+          </ScaleIn>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   )
 }
 
 // 差异项行
-function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem }) {
+function DiffItemRow({ item, index }: { item: import('@/lib/bookmark/diff').DiffItem; index: number }) {
   const { t } = useTranslation()
   const bgColor = item.type === 'added' ? 'bg-emerald-50 border-emerald-200' :
                   item.type === 'removed' ? 'bg-red-50 border-red-200' :
@@ -938,7 +954,6 @@ function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem })
                     'text-amber-700'
   const icon = item.type === 'added' ? '+' : item.type === 'removed' ? '-' : '~'
 
-  // 当 title 为空时，使用 URL 的域名或显示"无标题"
   function getDisplayTitle(title: string | undefined, url: string | undefined): string {
     if (title) return title
     if (url) {
@@ -954,7 +969,12 @@ function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem })
   const displayTitle = getDisplayTitle(item.title, item.url)
 
   return (
-    <div className={`p-3 rounded-lg border ${bgColor}`}>
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ ...springPresets.gentle, delay: index * 0.03 }}
+      className={`p-3 rounded-lg border ${bgColor}`}
+    >
       <div className="flex items-start gap-2">
         <span className={`font-mono font-bold ${textColor}`}>{icon}</span>
         <div className="flex-1 min-w-0">
@@ -972,6 +992,6 @@ function DiffItemRow({ item }: { item: import('@/lib/bookmark/diff').DiffItem })
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { DashboardIcon, SettingsIcon } from './Icons'
+import { motion } from '@/lib/motion'
+import { springPresets } from '@/lib/motion'
 
 interface SidebarProps {
   currentPage: 'dashboard' | 'settings'
@@ -27,12 +29,19 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <nav className="flex-1 p-3">
         <ul className="space-y-1">
           {navItems.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="relative">
+              {currentPage === item.id && (
+                <motion.div
+                  layoutId="nav-indicator"
+                  className="absolute inset-0 bg-sky-50 rounded-xl shadow-sm"
+                  transition={springPresets.snappy}
+                />
+              )}
               <button
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${currentPage === item.id
-                  ? 'bg-sky-50 text-sky-600 shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${currentPage === item.id
+                  ? 'text-sky-600'
+                  : 'text-gray-500 hover:text-gray-900'
                   }`}
               >
                 <item.icon active={currentPage === item.id} />

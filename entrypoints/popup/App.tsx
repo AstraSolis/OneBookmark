@@ -6,6 +6,7 @@ import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
 import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
 import type { SyncStatus } from '@/lib/bookmark/types'
+import { motion, AnimatePresence, PressScale, springPresets, CheckIcon, CrossIcon, BottomSheet } from '@/lib/motion'
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -277,12 +278,19 @@ function App() {
             <p className="text-[10px] font-medium text-gray-500 mt-0.5">{t('common.appDesc')}</p>
           </div>
         </div>
-        <button onClick={openOptions} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-all" title={t('common.settings')}>
+        <motion.button
+          onClick={openOptions}
+          className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+          title={t('common.settings')}
+          whileHover={{ rotate: 90 }}
+          whileTap={{ scale: 0.9 }}
+          transition={springPresets.snappy}
+        >
           <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-        </button>
+        </motion.button>
       </div>
 
       {/* Content */}
@@ -302,7 +310,12 @@ function App() {
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="bg-white rounded-lg p-3.5 shadow-sm border border-gray-100">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={springPresets.gentle}
+              className="bg-white rounded-lg p-3.5 shadow-sm border border-gray-100"
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
                   <div className="flex items-center justify-center gap-1.5 mb-1">
@@ -323,7 +336,7 @@ function App() {
                   <p className="text-2xl font-bold text-gray-800">{folderCount}</p>
                 </div>
               </div>
-            </div>
+            </motion.div>
 
             {!isLoading && uploadCount === 0 && downloadCount === 0 && (
               <div className="text-center text-xs text-amber-600 bg-amber-50 rounded-lg py-2 border border-amber-200">
@@ -332,32 +345,40 @@ function App() {
             )}
 
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={handlePush} disabled={isSyncing || uploadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-sky-400 text-white rounded-lg shadow-sm hover:bg-sky-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              <PressScale onClick={handlePush} disabled={isSyncing || uploadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-sky-400 text-white rounded-lg shadow-sm hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSyncing && message.includes(t('popup.uploading')) ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 )}
                 <span className="text-sm font-medium">{t('popup.upload')}</span>
-              </button>
-              <button onClick={handlePullClick} disabled={isSyncing || downloadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-emerald-400 text-white rounded-lg shadow-sm hover:bg-emerald-500 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              </PressScale>
+              <PressScale onClick={handlePullClick} disabled={isSyncing || downloadCount === 0} className="flex items-center justify-center gap-2 py-3 bg-emerald-400 text-white rounded-lg shadow-sm hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSyncing && message.includes(t('popup.downloading')) ? (
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
                 ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 )}
                 <span className="text-sm font-medium">{t('popup.download')}</span>
-              </button>
+              </PressScale>
             </div>
 
             <div className="space-y-2">
-              {message && (
-                <div className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium border ${status === 'error' ? 'bg-red-50 text-red-700 border-red-200' : status === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
-                  {status === 'success' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-                  {status === 'error' && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>}
-                  {message}
-                </div>
-              )}
+              <AnimatePresence>
+                {message && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={springPresets.snappy}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium border ${status === 'error' ? 'bg-red-50 text-red-700 border-red-200' : status === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}
+                  >
+                    {status === 'success' && <CheckIcon className="w-3.5 h-3.5" />}
+                    {status === 'error' && <CrossIcon className="w-3.5 h-3.5" />}
+                    {message}
+                  </motion.div>
+                )}
+              </AnimatePresence>
               {lastSync && (
                 <div className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -376,9 +397,9 @@ function App() {
       </div>
 
       {/* 差异预览弹窗 */}
-      {showDiffPreview && diffResult && (
-        <div className="absolute inset-0 bg-black/50 flex items-end z-50">
-          <div className="w-full bg-white rounded-t-2xl animate-slide-up flex flex-col max-h-[85%]">
+      <BottomSheet isOpen={showDiffPreview && !!diffResult} onClose={handleDiffCancel} className="flex flex-col max-h-[85%]">
+        {diffResult && (
+          <>
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div>
                 <span className="font-medium text-gray-800">{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</span>
@@ -390,14 +411,12 @@ function App() {
                 </svg>
               </button>
             </div>
-            {/* 统计 */}
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 text-[10px]">
               <span className="text-gray-500">{t('popup.totalChanges', { count: diffResult.added.length + diffResult.removed.length + diffResult.modified.length })}:</span>
               {diffResult.added.length > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">+{diffResult.added.length}</span>}
               {diffResult.removed.length > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">-{diffResult.removed.length}</span>}
               {diffResult.modified.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">~{diffResult.modified.length}</span>}
             </div>
-            {/* 差异列表 */}
             <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-48">
               {[...diffResult.added, ...diffResult.removed, ...diffResult.modified].map((item, i) => {
                 const displayTitle = item.title || (item.url ? new URL(item.url).hostname : t('dashboard.noTitle'))
@@ -419,58 +438,56 @@ function App() {
                 )
               })}
             </div>
-            {/* 按钮 */}
             <div className="flex gap-2 p-3 border-t border-gray-100">
-              <button onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">{t('common.cancel')}</button>
-              <button onClick={handleDiffConfirm} className={`flex-1 py-2 text-sm text-white rounded-lg transition-colors ${
+              <PressScale onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">{t('common.cancel')}</PressScale>
+              <PressScale onClick={handleDiffConfirm} className={`flex-1 py-2 text-sm text-white rounded-lg transition-colors ${
                 diffAction === 'push' ? 'bg-sky-400 hover:bg-sky-500' : 'bg-emerald-400 hover:bg-emerald-500'
-              }`}>{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</button>
+              }`}>{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</PressScale>
             </div>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </BottomSheet>
 
       {/* 下载选择弹窗 */}
-      {showPullSelect && (
-        <div className="absolute inset-0 bg-black/50 flex items-end z-50">
-          <div className="w-full bg-white rounded-t-2xl animate-slide-up">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <span className="font-medium text-gray-800">{t('popup.selectSource')}</span>
-              <button onClick={() => setShowPullSelect(false)} className="p-1 text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-2 max-h-60 overflow-y-auto">
-              {downloadBackups.map((backup) => (
-                <button
-                  key={backup.id}
-                  onClick={() => handlePullFromBackup(backup)}
-                  className="w-full p-3 hover:bg-gray-50 rounded-lg text-left flex items-center gap-3"
-                >
-                  <div className="w-8 h-8 rounded-lg overflow-hidden bg-sky-100 flex-shrink-0">
-                    {backup.avatarUrl ? (
-                      <img src={backup.avatarUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold text-sm">G</div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-gray-800 truncate">{backup.name}</div>
-                    <div className="text-[10px] text-gray-400">
-                      {backup.lastSyncTime ? new Date(backup.lastSyncTime).toLocaleString() : t('popup.neverSynced')}
-                    </div>
-                  </div>
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                </button>
-              ))}
-            </div>
-          </div>
+      <BottomSheet isOpen={showPullSelect} onClose={() => setShowPullSelect(false)}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <span className="font-medium text-gray-800">{t('popup.selectSource')}</span>
+          <button onClick={() => setShowPullSelect(false)} className="p-1 text-gray-400 hover:text-gray-600">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-      )}
+        <div className="p-2 max-h-60 overflow-y-auto">
+          {downloadBackups.map((backup, index) => (
+            <motion.button
+              key={backup.id}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ ...springPresets.gentle, delay: index * 0.05 }}
+              onClick={() => handlePullFromBackup(backup)}
+              className="w-full p-3 hover:bg-gray-50 rounded-lg text-left flex items-center gap-3"
+            >
+              <div className="w-8 h-8 rounded-lg overflow-hidden bg-sky-100 flex-shrink-0">
+                {backup.avatarUrl ? (
+                  <img src={backup.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold text-sm">G</div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-800 truncate">{backup.name}</div>
+                <div className="text-[10px] text-gray-400">
+                  {backup.lastSyncTime ? new Date(backup.lastSyncTime).toLocaleString() : t('popup.neverSynced')}
+                </div>
+              </div>
+              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </motion.button>
+          ))}
+        </div>
+      </BottomSheet>
     </div>
   )
 }
