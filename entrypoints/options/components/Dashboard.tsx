@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import {
   getBackups,
@@ -17,13 +18,23 @@ import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
 import { FadeInUp, HoverScale, PressScale, AnimatePresence, Overlay, ScaleIn, Switch, motion, springPresets, Skeleton } from '@/lib/motion'
 
+// Portal 包装组件，将内容渲染到 body
+function Portal({ children }: { children: React.ReactNode }) {
+  return createPortal(children, document.body)
+}
+
 interface BackupWithProfile extends BackupConfig {
   username?: string
   avatarUrl?: string
   gistUrl?: string
 }
 
-export function Dashboard() {
+interface DashboardProps {
+  initialAction?: { action?: 'push' | 'pull'; backupId?: string }
+  onActionHandled?: () => void
+}
+
+export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   const { t } = useTranslation()
   const [backups, setBackups] = useState<BackupWithProfile[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,17 +48,45 @@ export function Dashboard() {
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
   const [diffAction, setDiffAction] = useState<'push' | 'pull' | null>(null)
   const [pendingPullBackup, setPendingPullBackup] = useState<BackupWithProfile | null>(null)
+  const initialActionHandled = useRef(false)
 
   useEffect(() => {
     loadBackups()
   }, [])
 
+  // 处理从 popup 传入的初始操作
+  useEffect(() => {
+    if (!initialAction?.action || loading || initialActionHandled.current) return
+    initialActionHandled.current = true
+
+    if (initialAction.action === 'push') {
+      handleBatchPush()
+    } else if (initialAction.action === 'pull') {
+      if (initialAction.backupId) {
+        const backup = backups.find(b => b.id === initialAction.backupId)
+        if (backup) handlePullFromBackup(backup)
+      } else {
+        handleBatchPull()
+      }
+    }
+    onActionHandled?.()
+  }, [initialAction, loading, backups])
+
   async function loadBackups() {
     setLoading(true)
     try {
       const list = await getBackups()
-      const withProfiles: BackupWithProfile[] = await Promise.all(
-        list.map(async (backup) => {
+      // 先设置基础数据，快速结束 loading 状态
+      const basicBackups: BackupWithProfile[] = list.map((backup) => ({
+        ...backup,
+        gistUrl: backup.gistId ? `https://gist.github.com/${backup.gistId}` : undefined
+      }))
+      setBackups(basicBackups)
+      setLoading(false)
+
+      // 异步加载 profile 信息
+      const withProfiles = await Promise.all(
+        basicBackups.map(async (backup) => {
           if (backup.type === 'gist' && backup.token) {
             try {
               const storage = new GistStorage(backup.token, backup.gistId)
@@ -55,8 +94,7 @@ export function Dashboard() {
               return {
                 ...backup,
                 username: profile?.name || 'GitHub User',
-                avatarUrl: profile?.avatar_url,
-                gistUrl: backup.gistId ? `https://gist.github.com/${backup.gistId}` : undefined
+                avatarUrl: profile?.avatar_url
               }
             } catch {
               return backup
@@ -68,8 +106,8 @@ export function Dashboard() {
       setBackups(withProfiles)
     } catch {
       setBackups([])
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   function handleNewBackup() {
@@ -708,13 +746,14 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
   }
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <Overlay onClick={onClose} />
-          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? t('dashboard.editBackup') : t('dashboard.newBackup')}</h3>
+    <Portal>
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <Overlay onClick={onClose} />
+            <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-800">{editingBackup ? t('dashboard.editBackup') : t('dashboard.newBackup')}</h3>
               <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -789,11 +828,12 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
                   {creating ? t('dashboard.saving') : (editingBackup ? t('common.save') : t('dashboard.create'))}
                 </PressScale>
               </div>
-            </div>
-          </ScaleIn>
-        </div>
-      )}
-    </AnimatePresence>
+              </div>
+            </ScaleIn>
+          </div>
+        )}
+      </AnimatePresence>
+    </Portal>
   )
 }
 
@@ -809,16 +849,17 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
   const { t } = useTranslation()
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <Overlay onClick={onClose} />
-          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
-              <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    <Portal>
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <Overlay onClick={onClose} />
+            <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
+                <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
@@ -851,13 +892,14 @@ function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModal
                 </motion.button>
               ))}
             </div>
-            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-              <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
-            </div>
-          </ScaleIn>
-        </div>
-      )}
-    </AnimatePresence>
+              <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
+              </div>
+            </ScaleIn>
+          </div>
+        )}
+      </AnimatePresence>
+    </Portal>
   )
 }
 
@@ -877,16 +919,17 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
   const actionDesc = action === 'push' ? t('popup.uploadOverwrite') : t('popup.downloadOverwrite')
 
   return (
-    <AnimatePresence>
-      {isOpen && diff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <Overlay onClick={onCancel} />
-          <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
-              </div>
+    <Portal>
+      <AnimatePresence>
+        {isOpen && diff && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <Overlay onClick={onCancel} />
+            <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
+                </div>
               <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600 rounded">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -935,11 +978,12 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
               >
                 {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
               </PressScale>
-            </div>
-          </ScaleIn>
-        </div>
-      )}
-    </AnimatePresence>
+              </div>
+            </ScaleIn>
+          </div>
+        )}
+      </AnimatePresence>
+    </Portal>
   )
 }
 

@@ -4,9 +4,9 @@ import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateB
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
-import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
+import { calculateDiff } from '@/lib/bookmark/diff'
 import type { SyncStatus } from '@/lib/bookmark/types'
-import { motion, AnimatePresence, PressScale, springPresets, CheckIcon, CrossIcon, BottomSheet } from '@/lib/motion'
+import { motion, AnimatePresence, PressScale, springPresets, CheckIcon, CrossIcon } from '@/lib/motion'
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -23,13 +23,7 @@ function App() {
   const [bookmarkCount, setBookmarkCount] = useState(0)
   const [folderCount, setFolderCount] = useState(0)
   const [lockInfo, setLockInfo] = useState<{ locked: boolean; elapsed?: number } | null>(null)
-  const [showPullSelect, setShowPullSelect] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  // 差异预览相关状态
-  const [showDiffPreview, setShowDiffPreview] = useState(false)
-  const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
-  const [diffAction, setDiffAction] = useState<'push' | 'pull' | null>(null)
-  const [pendingPullBackup, setPendingPullBackup] = useState<BackupWithProfile | null>(null)
 
   useEffect(() => {
     loadStatus().finally(() => setIsLoading(false))
@@ -117,15 +111,20 @@ function App() {
         const remoteBookmarks = remoteData?.bookmarks || []
         const diff = calculateDiff(remoteBookmarks, localBookmarks)
         if (diff.hasChanges) {
-          setDiffResult(diff)
-          setDiffAction('push')
-          setShowDiffPreview(true)
+          // 跳转到 options 页面显示差异预览
+          openOptionsWithAction('push')
           return
         }
       } catch { /* 获取差异失败，继续执行 */ }
     }
 
     await executePush()
+  }
+
+  function openOptionsWithAction(action: 'push' | 'pull', backupId?: string) {
+    const params = new URLSearchParams({ action })
+    if (backupId) params.set('backupId', backupId)
+    browser.tabs.create({ url: browser.runtime.getURL(`/options.html#${params}`) })
   }
 
   async function executePush() {
@@ -168,16 +167,15 @@ function App() {
       setMessage(t('popup.noDownloadBackup'))
       return
     }
-    if (downloadBackups.length === 1) {
-      handlePullFromBackup(downloadBackups[0])
-    } else {
-      setShowPullSelect(true)
+    // 多个备份源时跳转到 options 页面选择
+    if (downloadBackups.length > 1) {
+      openOptionsWithAction('pull')
+      return
     }
+    handlePullFromBackup(downloadBackups[0])
   }
 
   async function handlePullFromBackup(backup: BackupWithProfile) {
-    setShowPullSelect(false)
-
     const lockStatus = await getLockStatus()
     if (lockStatus.locked) {
       setLockInfo({ locked: true, elapsed: lockStatus.elapsed })
@@ -196,10 +194,8 @@ function App() {
           const localBookmarks = await getLocalBookmarks()
           const diff = calculateDiff(localBookmarks, remoteData.bookmarks)
           if (diff.hasChanges) {
-            setDiffResult(diff)
-            setDiffAction('pull')
-            setPendingPullBackup(backup)
-            setShowDiffPreview(true)
+            // 跳转到 options 页面显示差异预览
+            openOptionsWithAction('pull', backup.id)
             return
           }
         }
@@ -232,29 +228,6 @@ function App() {
       setStatus('error')
       setMessage(err instanceof Error ? err.message : t('popup.downloadFailed'))
     }
-  }
-
-  // 差异预览确认
-  async function handleDiffConfirm() {
-    setShowDiffPreview(false)
-    setDiffResult(null)
-
-    if (diffAction === 'push') {
-      await executePush()
-    } else if (diffAction === 'pull' && pendingPullBackup) {
-      await executePullFromBackup(pendingPullBackup)
-    }
-
-    setDiffAction(null)
-    setPendingPullBackup(null)
-  }
-
-  // 差异预览取消
-  function handleDiffCancel() {
-    setShowDiffPreview(false)
-    setDiffResult(null)
-    setDiffAction(null)
-    setPendingPullBackup(null)
   }
 
   function openOptions() {
@@ -370,98 +343,6 @@ function App() {
         )}
       </div>
 
-      {/* 差异预览弹窗 */}
-      <BottomSheet isOpen={showDiffPreview && !!diffResult} onClose={handleDiffCancel} className="flex flex-col max-h-[85%]">
-        {diffResult && (
-          <>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <div>
-                <span className="font-medium text-gray-800">{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</span>
-                <p className="text-[10px] text-gray-400">{diffAction === 'push' ? t('popup.uploadOverwrite') : t('popup.downloadOverwrite')}</p>
-              </div>
-              <button onClick={handleDiffCancel} className="p-1 text-gray-400 hover:text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2 text-[10px]">
-              <span className="text-gray-500">{t('popup.totalChanges', { count: diffResult.added.length + diffResult.removed.length + diffResult.modified.length })}:</span>
-              {diffResult.added.length > 0 && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">+{diffResult.added.length}</span>}
-              {diffResult.removed.length > 0 && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">-{diffResult.removed.length}</span>}
-              {diffResult.modified.length > 0 && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">~{diffResult.modified.length}</span>}
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5 max-h-48">
-              {[...diffResult.added, ...diffResult.removed, ...diffResult.modified].map((item, i) => {
-                const displayTitle = item.title || (item.url ? new URL(item.url).hostname : t('dashboard.noTitle'))
-                return (
-                  <div key={i} className={`p-2 rounded-lg text-xs ${
-                    item.type === 'added' ? 'bg-emerald-50 border border-emerald-200' :
-                    item.type === 'removed' ? 'bg-red-50 border border-red-200' :
-                    'bg-amber-50 border border-amber-200'
-                  }`}>
-                    <div className="flex items-center gap-1.5">
-                      <span className={`font-mono font-bold ${
-                        item.type === 'added' ? 'text-emerald-600' :
-                        item.type === 'removed' ? 'text-red-600' : 'text-amber-600'
-                      }`}>{item.type === 'added' ? '+' : item.type === 'removed' ? '-' : '~'}</span>
-                      <span className="font-medium text-gray-800 truncate">{displayTitle}</span>
-                    </div>
-                    {item.url && <div className="text-[10px] text-gray-500 truncate mt-0.5 pl-4">{item.url}</div>}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex gap-2 p-3 border-t border-gray-100">
-              <PressScale onClick={handleDiffCancel} className="flex-1 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">{t('common.cancel')}</PressScale>
-              <PressScale onClick={handleDiffConfirm} className={`flex-1 py-2 text-sm text-white rounded-lg transition-colors ${
-                diffAction === 'push' ? 'bg-sky-400 hover:bg-sky-500' : 'bg-emerald-400 hover:bg-emerald-500'
-              }`}>{diffAction === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</PressScale>
-            </div>
-          </>
-        )}
-      </BottomSheet>
-
-      {/* 下载选择弹窗 */}
-      <BottomSheet isOpen={showPullSelect} onClose={() => setShowPullSelect(false)}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <span className="font-medium text-gray-800">{t('popup.selectSource')}</span>
-          <button onClick={() => setShowPullSelect(false)} className="p-1 text-gray-400 hover:text-gray-600">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-2 max-h-60 overflow-y-auto">
-          {downloadBackups.map((backup, index) => (
-            <motion.button
-              key={backup.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ ...springPresets.gentle, delay: index * 0.05 }}
-              onClick={() => handlePullFromBackup(backup)}
-              className="w-full p-3 hover:bg-gray-50 rounded-lg text-left flex items-center gap-3"
-            >
-              <div className="w-8 h-8 rounded-lg overflow-hidden bg-sky-100 flex-shrink-0">
-                {backup.avatarUrl ? (
-                  <img src={backup.avatarUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-sky-500 font-bold text-sm">G</div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-800 truncate">{backup.name}</div>
-                <div className="text-[10px] text-gray-400">
-                  {backup.lastSyncTime ? new Date(backup.lastSyncTime).toLocaleString() : t('popup.neverSynced')}
-                </div>
-              </div>
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-            </motion.button>
-          ))}
-        </div>
-      </BottomSheet>
     </div>
   )
 }
