@@ -1,24 +1,32 @@
 import type { SyncResult, BookmarkNode } from '../bookmark/types'
 import type { StorageBackend } from '../storage/interface'
-import { getLocalBookmarks, createSyncData } from '../bookmark/parser'
-import { writeBookmarks } from '../bookmark/writer'
+import { getLocalBookmarks, getBookmarksByFolder, createSyncData } from '../bookmark/parser'
+import { writeBookmarks, writeBookmarksToFolder } from '../bookmark/writer'
 import { withLock } from './lock'
+
+// 同步选项
+export interface SyncOptions {
+  folderPath?: string | null
+}
 
 // 同步引擎（仅支持手动上传/下载）
 export class SyncEngine {
   private storage: StorageBackend
+  private options: SyncOptions
 
-  constructor(storage: StorageBackend) {
+  constructor(storage: StorageBackend, options: SyncOptions = {}) {
     this.storage = storage
+    this.options = options
   }
 
   // 上传本地书签到远端（覆盖模式）
   async push(): Promise<SyncResult> {
     try {
       return await withLock('push', async () => {
-        console.log('[Sync] 开始 Push 操作')
+        const folderPath = this.options.folderPath
+        console.log('[Sync] 开始 Push 操作，文件夹:', folderPath || '根目录')
 
-        const localBookmarks = await getLocalBookmarks()
+        const localBookmarks = await getBookmarksByFolder(folderPath || null)
         const syncData = createSyncData(localBookmarks)
 
         await this.storage.write(syncData)
@@ -36,7 +44,8 @@ export class SyncEngine {
   async pull(): Promise<SyncResult> {
     try {
       return await withLock('pull', async () => {
-        console.log('[Sync] 开始 Pull 操作')
+        const folderPath = this.options.folderPath
+        console.log('[Sync] 开始 Pull 操作，文件夹:', folderPath || '根目录')
 
         const data = await this.storage.read()
 
@@ -44,7 +53,7 @@ export class SyncEngine {
           throw new Error('远端没有数据')
         }
 
-        const count = await writeBookmarks(data.bookmarks)
+        const count = await writeBookmarksToFolder(data.bookmarks, folderPath || null)
 
         console.log('[Sync] Pull 完成，变更数:', count)
         return { success: true as const, changes: count }

@@ -137,7 +137,7 @@ function App() {
       for (const backup of uploadBackups) {
         try {
           const storage = new GistStorage(backup.token, backup.gistId)
-          const engine = new SyncEngine(storage)
+          const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
           const result = await engine.push()
           if (result.success) {
             const gistId = storage.getGistId()
@@ -212,7 +212,7 @@ function App() {
 
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage)
+      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
       const result = await engine.pull()
 
       if (result.success) {

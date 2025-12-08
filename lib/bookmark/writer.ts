@@ -454,3 +454,110 @@ export async function writeBookmarks(bookmarks: BookmarkNode[]): Promise<number>
   }
   return result.changes
 }
+
+// 写入书签到指定文件夹
+export async function writeBookmarksToFolder(
+  bookmarks: BookmarkNode[],
+  folderPath: string | null
+): Promise<number> {
+  if (!folderPath || folderPath === '/') {
+    return writeBookmarks(bookmarks)
+  }
+
+  // 查找或创建目标文件夹
+  const targetFolderId = await ensureTargetFolder(folderPath)
+  if (!targetFolderId) {
+    throw new Error(`无法创建目标文件夹: ${folderPath}`)
+  }
+
+  // 清空目标文件夹
+  const subTree = await browser.bookmarks.getSubTree(targetFolderId)
+  if (subTree[0]?.children) {
+    for (const child of subTree[0].children) {
+      await browser.bookmarks.removeTree(child.id)
+    }
+  }
+
+  // 写入书签到目标文件夹
+  // 远端数据结构: [{ children: [{ title: "文件夹名", children: [...] }] }]
+  // 我们需要提取实际的书签内容
+  let count = 0
+  const actualBookmarks = extractActualBookmarks(bookmarks)
+
+  for (const node of actualBookmarks) {
+    await createBookmarkNode(node, targetFolderId)
+    count++
+  }
+
+  return count
+}
+
+// 提取实际的书签内容（跳过根节点包装）
+function extractActualBookmarks(bookmarks: BookmarkNode[]): BookmarkNode[] {
+  if (bookmarks.length === 0) return []
+
+  // 如果是完整的书签树结构（有虚拟根节点）
+  const root = bookmarks[0]
+  if (!root.title && root.children) {
+    // 这是浏览器的虚拟根，返回其子节点的子节点
+    const result: BookmarkNode[] = []
+    for (const folder of root.children) {
+      if (folder.children) {
+        result.push(...folder.children)
+      }
+    }
+    return result
+  }
+
+  // 如果是单个文件夹的子树
+  if (root.children && !root.url) {
+    return root.children
+  }
+
+  return bookmarks
+}
+
+// 确保目标文件夹存在
+async function ensureTargetFolder(folderPath: string): Promise<string | null> {
+  const tree = await browser.bookmarks.getTree()
+  const root = tree[0]
+  const parts = folderPath.split('/').filter(Boolean)
+
+  if (parts.length === 0 || !root.children) return null
+
+  let currentParentId: string | null = null
+  let currentChildren: chrome.bookmarks.BookmarkTreeNode[] = root.children
+
+  // 第一部分应该是根文件夹（书签栏、其他书签等）
+  const rootFolderName = parts[0]
+  const rootFolder = currentChildren.find(f => f.title === rootFolderName && !f.url)
+
+  if (!rootFolder) {
+    // 根文件夹不存在，无法创建（浏览器限制）
+    return null
+  }
+
+  currentParentId = rootFolder.id
+  currentChildren = rootFolder.children || []
+
+  // 处理剩余路径
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i]
+    const existing = currentChildren.find(f => f.title === part && !f.url)
+
+    if (existing) {
+      currentParentId = existing.id
+      currentChildren = existing.children || []
+    } else {
+      // 创建文件夹
+      const created: chrome.bookmarks.BookmarkTreeNode = await browser.bookmarks.create({
+        parentId: currentParentId!,
+        title: part
+      })
+      currentParentId = created.id
+      currentChildren = []
+    }
+  }
+
+  return currentParentId
+}

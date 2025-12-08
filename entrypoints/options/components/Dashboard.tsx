@@ -152,13 +152,14 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     }
   }
 
-  async function handleModalSubmit(data: { name: string; token: string; gistId: string }) {
+  async function handleModalSubmit(data: { name: string; token: string; gistId: string; folderPath: string | null }) {
     try {
       if (editingBackup) {
         await updateBackup(editingBackup.id, {
           name: data.name,
           token: data.token,
-          gistId: data.gistId || null
+          gistId: data.gistId || null,
+          folderPath: data.folderPath
         })
         setMessage({ type: 'success', text: t('dashboard.backupUpdated') })
       } else {
@@ -170,7 +171,8 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
           type: 'gist',
           token: data.token,
           gistId: data.gistId || null,
-          lastSyncTime: null
+          lastSyncTime: null,
+          folderPath: data.folderPath
         })
         setMessage({ type: 'success', text: t('dashboard.backupAdded') })
       }
@@ -227,7 +229,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     for (const backup of enabled) {
       try {
         const storage = new GistStorage(backup.token, backup.gistId)
-        const engine = new SyncEngine(storage)
+        const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
         const result = await engine.push()
         if (result.success) {
           const gistId = storage.getGistId()
@@ -305,7 +307,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
 
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage)
+      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
@@ -506,7 +508,7 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
     setSyncing(true)
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage)
+      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
       const result = await engine.push()
       if (result.success) {
         const gistId = storage.getGistId()
@@ -530,7 +532,7 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
     setRestoring(true)
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage)
+      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
@@ -563,6 +565,11 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <span className="font-semibold text-slate-800">{backup.name}</span>
+                {backup.folderPath && (
+                  <span className="px-2 py-0.5 bg-amber-50 text-amber-600 text-xs rounded-md font-medium border border-amber-100" title={backup.folderPath}>
+                    {backup.folderPath.split('/').pop()}
+                  </span>
+                )}
                 {backup.uploadEnabled !== false && (
                   <span className="px-2 py-0.5 bg-sky-50 text-sky-600 text-xs rounded-md font-medium border border-sky-100">{t('popup.upload')}</span>
                 )}
@@ -669,7 +676,7 @@ interface NewBackupModalProps {
   isOpen: boolean
   editingBackup: BackupConfig | null
   onClose: () => void
-  onSubmit: (data: { name: string; token: string; gistId: string }) => void
+  onSubmit: (data: { name: string; token: string; gistId: string; folderPath: string | null }) => void
 }
 
 function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupModalProps) {
@@ -677,6 +684,8 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
   const [name, setName] = useState('')
   const [token, setToken] = useState('')
   const [gistId, setGistId] = useState('')
+  const [folderPath, setFolderPath] = useState<string | null>(null)
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
   const [testing, setTesting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -689,10 +698,12 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
         setName(editingBackup.name || '')
         setToken(editingBackup.token || '')
         setGistId(editingBackup.gistId || '')
+        setFolderPath(editingBackup.folderPath || null)
       } else {
         setName('')
         setToken('')
         setGistId('')
+        setFolderPath(null)
       }
       setTimeout(() => inputRef.current?.focus(), 100)
     }
@@ -736,7 +747,8 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
       onSubmit({
         name: name.trim() || 'GitHub Gist',
         token: token.trim(),
-        gistId: gistId.trim()
+        gistId: gistId.trim(),
+        folderPath
       })
     } catch {
       setTestResult({ success: false, message: t('dashboard.verifyFailed') })
@@ -804,6 +816,21 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
                   <a href="https://gist.github.com/" target="_blank" rel="noopener noreferrer" className="text-sky-500 hover:underline ml-1">{t('dashboard.viewMyGist')}</a>
                 </p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('dashboard.folderPath')}</label>
+                <button
+                  type="button"
+                  onClick={() => setShowFolderPicker(true)}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-left text-sm transition-all hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20 focus:border-sky-400"
+                >
+                  {folderPath ? (
+                    <span className="text-slate-800">{folderPath}</span>
+                  ) : (
+                    <span className="text-slate-400">{t('dashboard.rootFolder')}</span>
+                  )}
+                </button>
+                <p className="mt-1.5 text-xs text-slate-400">{t('dashboard.folderPathHint')}</p>
+              </div>
               <AnimatePresence>
                 {testResult && (
                   <motion.div
@@ -833,6 +860,15 @@ function NewBackupModal({ isOpen, editingBackup, onClose, onSubmit }: NewBackupM
           </div>
         )}
       </AnimatePresence>
+      <FolderPickerModal
+        isOpen={showFolderPicker}
+        currentPath={folderPath}
+        onClose={() => setShowFolderPicker(false)}
+        onSelect={(path) => {
+          setFolderPath(path)
+          setShowFolderPicker(false)
+        }}
+      />
     </Portal>
   )
 }
@@ -978,6 +1014,111 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
               >
                 {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
               </PressScale>
+              </div>
+            </ScaleIn>
+          </div>
+        )}
+      </AnimatePresence>
+    </Portal>
+  )
+}
+
+// 文件夹选择器弹窗
+interface FolderPickerModalProps {
+  isOpen: boolean
+  currentPath: string | null
+  onClose: () => void
+  onSelect: (path: string | null) => void
+}
+
+function FolderPickerModal({ isOpen, currentPath, onClose, onSelect }: FolderPickerModalProps) {
+  const { t } = useTranslation()
+  const [folders, setFolders] = useState<Array<{ path: string; title: string; depth: number }>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (isOpen) {
+      loadFolders()
+    }
+  }, [isOpen])
+
+  async function loadFolders() {
+    setLoading(true)
+    try {
+      const tree = await browser.bookmarks.getTree()
+      const result: Array<{ path: string; title: string; depth: number }> = []
+
+      function traverse(nodes: chrome.bookmarks.BookmarkTreeNode[], parentPath: string, depth: number) {
+        for (const node of nodes) {
+          if (!node.url && node.title) {
+            const path = `${parentPath}/${node.title}`
+            result.push({ path, title: node.title, depth })
+            if (node.children) {
+              traverse(node.children, path, depth + 1)
+            }
+          } else if (!node.title && node.children) {
+            traverse(node.children, '', depth)
+          }
+        }
+      }
+
+      traverse(tree, '', 0)
+      setFolders(result)
+    } catch (err) {
+      console.error('加载文件夹失败:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Portal>
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            <Overlay onClick={onClose} />
+            <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 max-h-[70vh] flex flex-col">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectFolder')}</h3>
+                <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                {loading ? (
+                  <div className="p-4 text-center text-slate-400">{t('common.loading')}</div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onSelect(null)}
+                      className={`w-full p-3 rounded-lg text-left transition-colors flex items-center gap-3 ${
+                        currentPath === null ? 'bg-sky-50 text-sky-700' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                      </svg>
+                      <span className="font-medium">{t('dashboard.rootFolder')}</span>
+                    </button>
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.path}
+                        onClick={() => onSelect(folder.path)}
+                        className={`w-full p-3 rounded-lg text-left transition-colors flex items-center gap-3 ${
+                          currentPath === folder.path ? 'bg-sky-50 text-sky-700' : 'hover:bg-slate-50 text-slate-700'
+                        }`}
+                        style={{ paddingLeft: `${12 + folder.depth * 16}px` }}
+                      >
+                        <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                        </svg>
+                        <span className="truncate">{folder.title}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             </ScaleIn>
           </div>

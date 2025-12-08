@@ -102,6 +102,12 @@
     "disableDownload": "Disable download",
     "enableDownload": "Enable download",
     "noTitle": "No title",
-    "originalTitle": "Original title"
+    "originalTitle": "Original title",
+    "folderPath": "Sync Folder",
+    "folderPathHint": "Select bookmark folder to sync, leave empty for all",
+    "folderPathPlaceholder": "Click to select folder",
+    "rootFolder": "Root (All bookmarks)",
+    "selectFolder": "Select Folder",
+    "folderNotFound": "Folder not found"
   }
 }

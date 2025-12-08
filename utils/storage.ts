@@ -9,6 +9,8 @@ export interface BackupConfig {
   token: string
   gistId: string | null
   lastSyncTime: number | null
+  // 文件夹映射路径，如 "/书签栏/工作"，空或 "/" 表示根目录
+  folderPath: string | null
 }
 
 const CONFIG_KEY = 'onebookmark_backups'

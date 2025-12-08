@@ -102,6 +102,12 @@
     "disableDownload": "禁用下载",
     "enableDownload": "启用下载",
     "noTitle": "无标题",
-    "originalTitle": "原标题"
+    "originalTitle": "原标题",
+    "folderPath": "同步文件夹",
+    "folderPathHint": "选择要同步的书签文件夹，留空表示同步全部",
+    "folderPathPlaceholder": "点击选择文件夹",
+    "rootFolder": "根目录（全部书签）",
+    "selectFolder": "选择文件夹",
+    "folderNotFound": "文件夹不存在"
   }
 }
