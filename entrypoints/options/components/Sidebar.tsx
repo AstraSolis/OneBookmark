@@ -20,7 +20,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       {/* Logo */}
       <div className="px-5 py-6">
         <div className="flex items-center gap-3">
-          <img src="/icon/48.png" alt="Logo" className="w-9 h-9 rounded-xl" />
+          <img src="/icon/icon.svg" alt="Logo" className="w-9 h-9 rounded-xl" />
           <span className="font-bold text-lg text-gray-800 tracking-tight">{t('common.appName')}</span>
         </div>
       </div>

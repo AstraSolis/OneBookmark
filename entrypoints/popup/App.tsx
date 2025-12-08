@@ -245,7 +245,7 @@ function App() {
       {/* Header */}
       <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-gray-100">
         <div className="flex items-center gap-2.5">
-          <img src="/icon/48.png" alt="Logo" className="w-7 h-7 rounded" />
+          <img src="/icon/icon.svg" alt="Logo" className="w-7 h-7 rounded" />
           <span className="text-base font-semibold text-gray-800">{t('common.appName')}</span>
         </div>
         <motion.button
