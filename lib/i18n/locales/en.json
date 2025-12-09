@@ -108,6 +108,8 @@
     "folderPathPlaceholder": "Click to select folder",
     "rootFolder": "Root (All bookmarks)",
     "selectFolder": "Select Folder",
-    "folderNotFound": "Folder not found"
+    "folderNotFound": "Folder not found",
+    "exportHtml": "Export HTML",
+    "exportSuccess": "Bookmarks exported"
   }
 }

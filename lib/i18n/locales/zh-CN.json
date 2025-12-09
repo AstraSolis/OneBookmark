@@ -108,6 +108,8 @@
     "folderPathPlaceholder": "点击选择文件夹",
     "rootFolder": "根目录（全部书签）",
     "selectFolder": "选择文件夹",
-    "folderNotFound": "文件夹不存在"
+    "folderNotFound": "文件夹不存在",
+    "exportHtml": "导出 HTML",
+    "exportSuccess": "书签已导出"
   }
 }
