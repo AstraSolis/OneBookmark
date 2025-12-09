@@ -49,6 +49,10 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
   const [diffAction, setDiffAction] = useState<'push' | 'pull' | null>(null)
   const [pendingPullBackup, setPendingPullBackup] = useState<BackupWithProfile | null>(null)
+  // 批量上传队列状态
+  const [pendingPushBackups, setPendingPushBackups] = useState<BackupConfig[]>([])
+  const [currentPushBackup, setCurrentPushBackup] = useState<BackupConfig | null>(null)
+  const [pushResults, setPushResults] = useState<{ success: number; fail: number }>({ success: 0, fail: 0 })
   const initialActionHandled = useRef(false)
 
   useEffect(() => {
@@ -198,31 +202,107 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
 
     // 检查是否启用差异预览
     const settings = await getSettings()
-    if (settings.diffPreviewEnabled && enabled[0].gistId) {
+    if (settings.diffPreviewEnabled) {
+      // 初始化队列和结果
+      setPendingPushBackups(enabled)
+      setPushResults({ success: 0, fail: 0 })
+      // 开始处理第一个备份
+      await processNextPushBackup(enabled, { success: 0, fail: 0 })
+      return
+    }
+
+    await executeBatchPush()
+  }
+
+  // 处理队列中下一个备份的 diff 预览
+  async function processNextPushBackup(
+    queue: BackupConfig[],
+    results: { success: number; fail: number }
+  ) {
+    if (queue.length === 0) {
+      // 队列处理完毕，显示结果
+      finishBatchPush(results)
+      return
+    }
+
+    const [current, ...rest] = queue
+    setPendingPushBackups(rest)
+    setCurrentPushBackup(current)
+
+    // 尝试获取 diff
+    if (current.gistId) {
       try {
-        const storage = new GistStorage(enabled[0].token, enabled[0].gistId)
+        const storage = new GistStorage(current.token, current.gistId)
         const remoteData = await storage.read()
-        // 使用与实际同步相同的文件夹路径获取本地书签
-        const folderPath = enabled[0].folderPath
+        const folderPath = current.folderPath
         const localBookmarks = folderPath
           ? await getBookmarksByFolder(folderPath)
           : await getLocalBookmarks()
         const remoteBookmarks = remoteData?.bookmarks || []
-        // 上传：远端将被本地覆盖，所以 source=远端, target=本地
-        // 如果使用了文件夹同步，跳过根路径比较（不同设备可能使用不同文件夹名）
         const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
+
         if (diff.hasChanges) {
+          // 有变更，显示预览
           setDiffResult(diff)
           setDiffAction('push')
+          setPushResults(results)
           setShowDiffModal(true)
           return
         }
       } catch {
-        // 获取差异失败，继续执行上传
+        // 获取差异失败，直接执行上传
       }
     }
 
-    await executeBatchPush()
+    // 无变更或无法获取 diff，直接执行上传
+    const newResults = await executeSinglePush(current, results)
+    await processNextPushBackup(rest, newResults)
+  }
+
+  // 执行单个备份的上传
+  async function executeSinglePush(
+    backup: BackupConfig,
+    results: { success: number; fail: number }
+  ): Promise<{ success: number; fail: number }> {
+    setBatchSyncing('push')
+    try {
+      const storage = new GistStorage(backup.token, backup.gistId)
+      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
+      const result = await engine.push()
+      if (result.success) {
+        const gistId = storage.getGistId()
+        if (gistId && gistId !== backup.gistId) {
+          await updateBackup(backup.id, { gistId, lastSyncTime: Date.now() })
+        } else {
+          await updateBackup(backup.id, { lastSyncTime: Date.now() })
+        }
+        return { success: results.success + 1, fail: results.fail }
+      }
+      return { success: results.success, fail: results.fail + 1 }
+    } catch {
+      return { success: results.success, fail: results.fail + 1 }
+    } finally {
+      setBatchSyncing(null)
+    }
+  }
+
+  // 完成批量上传，显示结果
+  async function finishBatchPush(results: { success: number; fail: number }) {
+    setCurrentPushBackup(null)
+    setPendingPushBackups([])
+    setPushResults({ success: 0, fail: 0 })
+    await loadBackups()
+
+    if (results.success === 0 && results.fail === 0) {
+      // 所有备份都没有变更或被跳过
+      setMessage({ type: 'success', text: t('popup.noChanges') })
+    } else if (results.fail === 0) {
+      setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: results.success }) })
+    } else if (results.success === 0) {
+      setMessage({ type: 'error', text: t('popup.uploadFailed') })
+    } else {
+      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.success, fail: results.fail }) })
+    }
   }
 
   // 执行批量上传
@@ -339,22 +419,56 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     setShowDiffModal(false)
     setDiffResult(null)
 
-    if (diffAction === 'push') {
-      await executeBatchPush()
+    if (diffAction === 'push' && currentPushBackup) {
+      // 执行当前备份的上传，然后继续处理队列
+      const newResults = await executeSinglePush(currentPushBackup, pushResults)
+      setDiffAction(null)
+      await processNextPushBackup(pendingPushBackups, newResults)
     } else if (diffAction === 'pull' && pendingPullBackup) {
       await executePullFromBackup(pendingPullBackup)
+      setDiffAction(null)
+      setPendingPullBackup(null)
+    }
+  }
+
+  // 差异预览取消（跳过当前备份，继续下一个）
+  async function handleDiffCancel() {
+    setShowDiffModal(false)
+    setDiffResult(null)
+
+    // 如果是 push 操作，跳过当前备份，继续处理队列
+    if (diffAction === 'push' && currentPushBackup) {
+      setDiffAction(null)
+      // 继续处理下一个备份
+      await processNextPushBackup(pendingPushBackups, pushResults)
+      return
     }
 
+    // pull 操作直接关闭
     setDiffAction(null)
     setPendingPullBackup(null)
   }
 
-  // 差异预览取消
-  function handleDiffCancel() {
+  // 取消整个批量上传操作
+  function handleCancelAllPush() {
     setShowDiffModal(false)
     setDiffResult(null)
     setDiffAction(null)
-    setPendingPullBackup(null)
+    setCurrentPushBackup(null)
+    setPendingPushBackups([])
+
+    if (pushResults.success > 0 || pushResults.fail > 0) {
+      loadBackups()
+      if (pushResults.fail === 0 && pushResults.success > 0) {
+        setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: pushResults.success }) })
+      } else if (pushResults.success > 0) {
+        setMessage({
+          type: 'error',
+          text: t('popup.partialSuccess', { success: pushResults.success, fail: pushResults.fail }),
+        })
+      }
+    }
+    setPushResults({ success: 0, fail: 0 })
   }
 
   const enabledCount = backups.filter(b => b.enabled).length
@@ -478,8 +592,11 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
         isOpen={showDiffModal}
         diff={diffResult}
         action={diffAction}
+        backupName={diffAction === 'push' ? currentPushBackup?.name : pendingPullBackup?.name}
+        hasMoreBackups={diffAction === 'push' && pendingPushBackups.length > 0}
         onConfirm={handleDiffConfirm}
-        onCancel={handleDiffCancel}
+        onSkip={handleDiffCancel}
+        onCancelAll={handleCancelAllPush}
       />
     </FadeInUp>
   )
@@ -988,11 +1105,23 @@ interface DiffPreviewModalProps {
   isOpen: boolean
   diff: DiffResult | null
   action: 'push' | 'pull' | null
+  backupName?: string
+  hasMoreBackups?: boolean
   onConfirm: () => void
-  onCancel: () => void
+  onSkip: () => void
+  onCancelAll: () => void
 }
 
-function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPreviewModalProps) {
+function DiffPreviewModal({
+  isOpen,
+  diff,
+  action,
+  backupName,
+  hasMoreBackups,
+  onConfirm,
+  onSkip,
+  onCancelAll,
+}: DiffPreviewModalProps) {
   const { t } = useTranslation()
 
   const totalChanges = diff ? diff.added.length + diff.removed.length + diff.modified.length : 0
@@ -1003,61 +1132,97 @@ function DiffPreviewModal({ isOpen, diff, action, onConfirm, onCancel }: DiffPre
       <AnimatePresence>
         {isOpen && diff && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <Overlay onClick={onCancel} />
+            <Overlay onClick={hasMoreBackups ? onSkip : onCancelAll} />
             <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-800">{action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-slate-800">
+                      {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
+                    </h3>
+                    {backupName && (
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full">
+                        {backupName}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-400 mt-0.5">{actionDesc}</p>
                 </div>
-              <button onClick={onCancel} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+                <button
+                  onClick={hasMoreBackups ? onSkip : onCancelAll}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
 
-            {/* 统计信息 */}
-            <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
-              <span className="text-sm text-slate-600">{t('popup.totalChanges', { count: totalChanges })}:</span>
-              {diff.added.length > 0 && (
-                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">+{diff.added.length}</span>
-              )}
-              {diff.removed.length > 0 && (
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length}</span>
-              )}
-              {diff.modified.length > 0 && (
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">~{diff.modified.length}</span>
-              )}
-            </div>
+              {/* 统计信息 */}
+              <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-4">
+                <span className="text-sm text-slate-600">{t('popup.totalChanges', { count: totalChanges })}:</span>
+                {diff.added.length > 0 && (
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs rounded-full">
+                    +{diff.added.length}
+                  </span>
+                )}
+                {diff.removed.length > 0 && (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs rounded-full">-{diff.removed.length}</span>
+                )}
+                {diff.modified.length > 0 && (
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">
+                    ~{diff.modified.length}
+                  </span>
+                )}
+              </div>
 
-            {/* 差异列表 */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {diff.added.map((item, i) => (
-                <DiffItemRow key={`add-${i}`} item={item} index={i} />
-              ))}
-              {diff.removed.map((item, i) => (
-                <DiffItemRow key={`rm-${i}`} item={item} index={diff.added.length + i} />
-              ))}
-              {diff.modified.map((item, i) => (
-                <DiffItemRow key={`mod-${i}`} item={item} index={diff.added.length + diff.removed.length + i} />
-              ))}
-            </div>
+              {/* 差异列表 */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {diff.added.map((item, i) => (
+                  <DiffItemRow key={`add-${i}`} item={item} index={i} />
+                ))}
+                {diff.removed.map((item, i) => (
+                  <DiffItemRow key={`rm-${i}`} item={item} index={diff.added.length + i} />
+                ))}
+                {diff.modified.map((item, i) => (
+                  <DiffItemRow key={`mod-${i}`} item={item} index={diff.added.length + diff.removed.length + i} />
+                ))}
+              </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-              <PressScale onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-                {t('common.cancel')}
-              </PressScale>
-              <PressScale
-                onClick={onConfirm}
-                className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-colors shadow-lg ${
-                  action === 'push'
-                    ? 'bg-sky-400 hover:bg-sky-500 shadow-sky-200'
-                    : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
-                }`}
-              >
-                {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
-              </PressScale>
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                {hasMoreBackups ? (
+                  <>
+                    <PressScale
+                      onClick={onCancelAll}
+                      className="px-4 py-2 text-sm font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      {t('common.cancelAll')}
+                    </PressScale>
+                    <PressScale
+                      onClick={onSkip}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                    >
+                      {t('common.skip')}
+                    </PressScale>
+                  </>
+                ) : (
+                  <PressScale
+                    onClick={onCancelAll}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </PressScale>
+                )}
+                <PressScale
+                  onClick={onConfirm}
+                  className={`px-4 py-2 text-white text-sm font-medium rounded-xl transition-colors shadow-lg ${
+                    action === 'push'
+                      ? 'bg-sky-400 hover:bg-sky-500 shadow-sky-200'
+                      : 'bg-emerald-400 hover:bg-emerald-500 shadow-emerald-200'
+                  }`}
+                >
+                  {action === 'push' ? t('popup.confirmUpload') : t('popup.confirmDownload')}
+                </PressScale>
               </div>
             </ScaleIn>
           </div>
