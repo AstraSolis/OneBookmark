@@ -16,13 +16,22 @@ export interface BackupConfig {
 const CONFIG_KEY = 'onebookmark_backups'
 const SETTINGS_KEY = 'onebookmark_settings'
 
+// 背景设置
+export interface BackgroundSettings {
+  type: 'particles' | 'remote' | 'local' | 'none'
+  remoteUrl?: string
+  localData?: string // Base64 编码的图片数据
+}
+
 // 应用设置
 export interface AppSettings {
   diffPreviewEnabled: boolean
+  background: BackgroundSettings
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  diffPreviewEnabled: false
+  diffPreviewEnabled: false,
+  background: { type: 'particles' }
 }
 
 // 获取设置

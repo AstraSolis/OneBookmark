@@ -1,9 +1,28 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { getSettings, type BackgroundSettings } from '@/utils/storage'
 
 export function ParticlesBackground() {
     const canvasRef = useRef<HTMLCanvasElement>(null)
+    const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
 
+    // 监听设置变化
     useEffect(() => {
+        async function loadBackground() {
+            const settings = await getSettings()
+            setBackground(settings.background || { type: 'particles' })
+        }
+        loadBackground()
+
+        // 监听 storage 变化
+        const handleStorageChange = () => loadBackground()
+        browser.storage.onChanged.addListener(handleStorageChange)
+        return () => browser.storage.onChanged.removeListener(handleStorageChange)
+    }, [])
+
+    // 粒子动画
+    useEffect(() => {
+        if (background.type !== 'particles') return
+
         const canvas = canvasRef.current
         if (!canvas) return
 
@@ -34,7 +53,6 @@ export function ParticlesBackground() {
                 this.speedX = Math.random() * 1 - 0.5
                 this.speedY = Math.random() * 1 - 0.5
 
-                // Random pastel colors (Sky Blue, Blue, Pink, Yellow)
                 const colors = ['#38bdf8', '#60a5fa', '#f472b6', '#fbbf24']
                 this.color = colors[Math.floor(Math.random() * colors.length)]
             }
@@ -87,7 +105,30 @@ export function ParticlesBackground() {
             window.removeEventListener('resize', resize)
             cancelAnimationFrame(animationFrameId)
         }
-    }, [])
+    }, [background.type])
+
+    // 根据背景类型渲染
+    if (background.type === 'none') {
+        return null
+    }
+
+    if (background.type === 'remote' && background.remoteUrl) {
+        return (
+            <div
+                className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat opacity-30"
+                style={{ backgroundImage: `url(${background.remoteUrl})` }}
+            />
+        )
+    }
+
+    if (background.type === 'local' && background.localData) {
+        return (
+            <div
+                className="fixed inset-0 pointer-events-none z-0 bg-cover bg-center bg-no-repeat opacity-30"
+                style={{ backgroundImage: `url(${background.localData})` }}
+            />
+        )
+    }
 
     return (
         <canvas

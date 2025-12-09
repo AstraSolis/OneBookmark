@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getEnabledBackups, getSettings, updateSettings } from '@/utils/storage'
+import { getEnabledBackups, getSettings, updateSettings, type BackgroundSettings } from '@/utils/storage'
 import { LanguageCards } from '@/lib/i18n/LanguageCards'
-import { FadeInUp, HoverScale, Switch } from '@/lib/motion'
+import { FadeInUp, HoverScale, Switch, AnimatePresence, motion, springPresets } from '@/lib/motion'
 
 export function Settings() {
   const { t, i18n } = useTranslation()
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
+  const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
+  const [bgUrlInput, setBgUrlInput] = useState('')
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  function showMessage(type: 'success' | 'error', text: string) {
+    setMessage({ type, text })
+    setTimeout(() => setMessage(null), 2000)
+  }
 
   useEffect(() => {
     loadConfig()
@@ -22,18 +30,71 @@ export function Settings() {
 
     const settings = await getSettings()
     setDiffPreviewEnabled(settings.diffPreviewEnabled)
+    setBackground(settings.background || { type: 'particles' })
+    setBgUrlInput(settings.background?.remoteUrl || '')
   }
 
   async function handleToggleDiffPreview() {
     const newValue = !diffPreviewEnabled
     setDiffPreviewEnabled(newValue)
     await updateSettings({ diffPreviewEnabled: newValue })
+    showMessage('success', t('settings.settingsSaved'))
+  }
+
+  async function handleBackgroundTypeChange(type: BackgroundSettings['type']) {
+    const newBg: BackgroundSettings = { type, remoteUrl: background.remoteUrl, localData: background.localData }
+    setBackground(newBg)
+    await updateSettings({ background: newBg })
+    showMessage('success', t('settings.backgroundChanged'))
+  }
+
+  async function handleApplyRemoteUrl() {
+    const newBg: BackgroundSettings = { type: 'remote', remoteUrl: bgUrlInput, localData: background.localData }
+    setBackground(newBg)
+    await updateSettings({ background: newBg })
+    showMessage('success', t('settings.backgroundApplied'))
+  }
+
+  function handleLocalImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string
+      const newBg: BackgroundSettings = { type: 'local', localData: base64, remoteUrl: background.remoteUrl }
+      setBackground(newBg)
+      await updateSettings({ background: newBg })
+      showMessage('success', t('settings.backgroundApplied'))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleClearLocalImage() {
+    const newBg: BackgroundSettings = { type: 'local', localData: undefined, remoteUrl: background.remoteUrl }
+    setBackground(newBg)
+    await updateSettings({ background: newBg })
+    showMessage('success', t('settings.backgroundCleared'))
   }
 
   return (
     <FadeInUp className="flex-1 p-8 overflow-auto relative z-10">
       <div className="w-full">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 tracking-tight">{t('settings.title')}</h1>
+
+        <AnimatePresence>
+          {message && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={springPresets.snappy}
+              className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-sky-50 text-sky-600'}`}
+            >
+              {message.text}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 同步信息 */}
@@ -70,18 +131,100 @@ export function Settings() {
             </HoverScale>
           </FadeInUp>
 
-          {/* 语言 */}
+          {/* 显示 */}
           <FadeInUp delay={0.1}>
             <HoverScale className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden h-full">
               <div className="px-5 py-4 border-b border-gray-100">
-                <h2 className="font-medium text-gray-800">{t('settings.language')}</h2>
+                <h2 className="font-medium text-gray-800">{t('settings.display')}</h2>
               </div>
-              <div className="p-5">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">{t('settings.displayLanguage')}</label>
-                  <p className="text-xs text-slate-500 mt-0.5">{t('settings.displayLanguageDesc')}</p>
+              <div className="p-5 space-y-4">
+                {/* 语言设置 */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">{t('settings.displayLanguage')}</label>
+                    <p className="text-xs text-slate-500 mt-0.5">{t('settings.displayLanguageDesc')}</p>
+                  </div>
+                  <LanguageCards />
                 </div>
-                <LanguageCards />
+
+                {/* 背景设置 */}
+                <div className="pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">{t('settings.background')}</label>
+                      <p className="text-xs text-slate-500 mt-0.5">{t('settings.backgroundType')}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {(['particles', 'remote', 'local', 'none'] as const).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => handleBackgroundTypeChange(type)}
+                          className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                            background.type === type
+                              ? 'bg-sky-50 border-sky-200 text-sky-600'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          {t(`settings.background${type.charAt(0).toUpperCase() + type.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 远程图片 URL 输入 */}
+                  {background.type === 'remote' && (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        type="url"
+                        value={bgUrlInput}
+                        onChange={(e) => setBgUrlInput(e.target.value)}
+                        placeholder={t('settings.backgroundUrlPlaceholder')}
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300"
+                      />
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-slate-400">{t('settings.backgroundUrlHint')}</p>
+                        <button
+                          onClick={handleApplyRemoteUrl}
+                          disabled={!bgUrlInput}
+                          className="px-4 py-1.5 text-xs bg-sky-400 text-white rounded-lg hover:bg-sky-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {t('settings.backgroundApply')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 本地图片选择 */}
+                  {background.type === 'local' && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <label className="px-4 py-1.5 text-xs bg-sky-400 text-white rounded-lg hover:bg-sky-500 transition-colors cursor-pointer">
+                          {t('settings.backgroundLocalSelect')}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleLocalImageSelect}
+                            className="hidden"
+                          />
+                        </label>
+                        {background.localData && (
+                          <button
+                            onClick={handleClearLocalImage}
+                            className="px-4 py-1.5 text-xs border border-gray-200 text-gray-600 rounded-lg hover:border-gray-300 transition-colors"
+                          >
+                            {t('settings.backgroundLocalClear')}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">{t('settings.backgroundLocalHint')}</p>
+                      {background.localData && (
+                        <div className="mt-2 rounded-lg overflow-hidden border border-gray-200">
+                          <img src={background.localData} alt="Preview" className="w-full h-24 object-cover" />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </HoverScale>
           </FadeInUp>

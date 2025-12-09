@@ -6,17 +6,17 @@ export function LanguageCards() {
   const { currentLang, changeLang, languages } = useLanguage()
 
   return (
-    <div className="flex gap-3 mt-6">
+    <div className="flex gap-2">
       {languages.map((lang) => (
         <motion.button
           key={lang.code}
           onClick={() => changeLang(lang.code)}
           whileTap={{ scale: 0.97 }}
           transition={springPresets.snappy}
-          className={`px-6 py-3 rounded-xl border-2 text-sm font-medium transition-colors ${
+          className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
             currentLang === lang.code
-              ? 'border-sky-400 bg-sky-50 text-sky-600'
-              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50'
+              ? 'border-sky-200 bg-sky-50 text-sky-600'
+              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
           }`}
         >
           {lang.name}
