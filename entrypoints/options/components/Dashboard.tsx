@@ -202,10 +202,15 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       try {
         const storage = new GistStorage(enabled[0].token, enabled[0].gistId)
         const remoteData = await storage.read()
-        const localBookmarks = await getLocalBookmarks()
+        // 使用与实际同步相同的文件夹路径获取本地书签
+        const folderPath = enabled[0].folderPath
+        const localBookmarks = folderPath
+          ? await getBookmarksByFolder(folderPath)
+          : await getLocalBookmarks()
         const remoteBookmarks = remoteData?.bookmarks || []
         // 上传：远端将被本地覆盖，所以 source=远端, target=本地
-        const diff = calculateDiff(remoteBookmarks, localBookmarks)
+        // 如果使用了文件夹同步，跳过根路径比较（不同设备可能使用不同文件夹名）
+        const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
         if (diff.hasChanges) {
           setDiffResult(diff)
           setDiffAction('push')
@@ -283,9 +288,14 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
         const storage = new GistStorage(backup.token, backup.gistId)
         const remoteData = await storage.read()
         if (remoteData) {
-          const localBookmarks = await getLocalBookmarks()
+          // 使用与实际同步相同的文件夹路径获取本地书签
+          const folderPath = backup.folderPath
+          const localBookmarks = folderPath
+            ? await getBookmarksByFolder(folderPath)
+            : await getLocalBookmarks()
           // 下载：本地将被远端覆盖，所以 source=本地, target=远端
-          const diff = calculateDiff(localBookmarks, remoteData.bookmarks)
+          // 如果使用了文件夹同步，跳过根路径比较（不同设备可能使用不同文件夹名）
+          const diff = calculateDiff(localBookmarks, remoteData.bookmarks, { skipRootPath: !!folderPath })
           if (diff.hasChanges) {
             setDiffResult(diff)
             setDiffAction('pull')

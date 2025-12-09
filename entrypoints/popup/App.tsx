@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, getSettings, type BackupConfig } from '@/utils/storage'
-import { getLocalBookmarks } from '@/lib/bookmark/parser'
+import { getLocalBookmarks, getBookmarksByFolder } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
 import { calculateDiff } from '@/lib/bookmark/diff'
@@ -107,9 +107,14 @@ function App() {
       try {
         const storage = new GistStorage(uploadBackups[0].token, uploadBackups[0].gistId)
         const remoteData = await storage.read()
-        const localBookmarks = await getLocalBookmarks()
+        // 使用与实际同步相同的文件夹路径获取本地书签
+        const folderPath = uploadBackups[0].folderPath
+        const localBookmarks = folderPath
+          ? await getBookmarksByFolder(folderPath)
+          : await getLocalBookmarks()
         const remoteBookmarks = remoteData?.bookmarks || []
-        const diff = calculateDiff(remoteBookmarks, localBookmarks)
+        // 如果使用了文件夹同步，跳过根路径比较
+        const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
         if (diff.hasChanges) {
           // 跳转到 options 页面显示差异预览
           openOptionsWithAction('push')
@@ -191,8 +196,13 @@ function App() {
         const storage = new GistStorage(backup.token, backup.gistId)
         const remoteData = await storage.read()
         if (remoteData) {
-          const localBookmarks = await getLocalBookmarks()
-          const diff = calculateDiff(localBookmarks, remoteData.bookmarks)
+          // 使用与实际同步相同的文件夹路径获取本地书签
+          const folderPath = backup.folderPath
+          const localBookmarks = folderPath
+            ? await getBookmarksByFolder(folderPath)
+            : await getLocalBookmarks()
+          // 如果使用了文件夹同步，跳过根路径比较
+          const diff = calculateDiff(localBookmarks, remoteData.bookmarks, { skipRootPath: !!folderPath })
           if (diff.hasChanges) {
             // 跳转到 options 页面显示差异预览
             openOptionsWithAction('pull', backup.id)

@@ -28,9 +28,11 @@ interface FlatBookmark {
 }
 
 // 扁平化书签为 Map，key 为 URL（书签的唯一标识）
+// skipRootPath: 是否跳过根同步文件夹的路径（用于跨设备不同文件夹名称的比较）
 function flattenBookmarks(
   nodes: BookmarkNode[],
-  path: string[] = []
+  path: string[] = [],
+  skipRootPath: boolean = false
 ): Map<string, FlatBookmark> {
   const map = new Map<string, FlatBookmark>()
 
@@ -42,8 +44,10 @@ function flattenBookmarks(
 
     if (node.children) {
       // 有 children 的是文件夹，递归处理
-      const childPath = [...path, node.title]
-      const childMap = flattenBookmarks(node.children, childPath)
+      // 如果 skipRootPath 且当前是根级别（path 为空），则不将此文件夹名加入路径
+      const shouldSkip = skipRootPath && path.length === 0
+      const childPath = shouldSkip ? [] : [...path, node.title]
+      const childMap = flattenBookmarks(node.children, childPath, false)
       childMap.forEach((v, k) => map.set(k, v))
     }
   }
@@ -51,12 +55,24 @@ function flattenBookmarks(
   return map
 }
 
+// 差异计算选项
+export interface DiffOptions {
+  // 是否跳过根同步文件夹的路径比较（用于跨设备不同文件夹名称的场景）
+  skipRootPath?: boolean
+}
+
 // 计算两个书签树的差异
 // source: 源数据（将被覆盖的）
 // target: 目标数据（将应用的）
-export function calculateDiff(source: BookmarkNode[], target: BookmarkNode[]): DiffResult {
-  const sourceMap = flattenBookmarks(source)
-  const targetMap = flattenBookmarks(target)
+// options: 差异计算选项
+export function calculateDiff(
+  source: BookmarkNode[],
+  target: BookmarkNode[],
+  options: DiffOptions = {}
+): DiffResult {
+  const { skipRootPath = false } = options
+  const sourceMap = flattenBookmarks(source, [], skipRootPath)
+  const targetMap = flattenBookmarks(target, [], skipRootPath)
 
   const added: DiffItem[] = []
   const removed: DiffItem[] = []
