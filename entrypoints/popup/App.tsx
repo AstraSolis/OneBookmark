@@ -138,26 +138,47 @@ function App() {
     setLockInfo(null)
 
     try {
-      let successCount = 0, failCount = 0
+      const results: { name: string; added: number; removed: number }[] = []
+      let failCount = 0
       for (const backup of uploadBackups) {
         try {
           const storage = new GistStorage(backup.token, backup.gistId)
+          let added = 0, removed = 0
+          // 计算 diff
+          if (backup.gistId) {
+            try {
+              const remoteData = await storage.read()
+              const folderPath = backup.folderPath
+              const localBookmarks = folderPath
+                ? await getBookmarksByFolder(folderPath)
+                : await getLocalBookmarks()
+              const remoteBookmarks = remoteData?.bookmarks || []
+              const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
+              if (!diff.hasChanges) continue // 没有变化，跳过
+              added = diff.added.length
+              removed = diff.removed.length
+            } catch { /* 获取 diff 失败，继续执行 */ }
+          }
           const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
           const result = await engine.push()
           if (result.success) {
             const gistId = storage.getGistId()
             await updateBackup(backup.id, { gistId: gistId !== backup.gistId ? gistId : backup.gistId, lastSyncTime: Date.now() })
-            successCount++
+            results.push({ name: backup.name, added, removed })
           } else failCount++
         } catch { failCount++ }
       }
 
-      if (failCount === 0) {
+      if (results.length === 0 && failCount === 0) {
         setStatus('success')
-        setMessage(t('popup.uploadSuccess', { count: successCount }))
-      } else if (successCount > 0) {
+        setMessage(t('popup.uploadSuccessNoChanges'))
+      } else if (failCount === 0) {
         setStatus('success')
-        setMessage(t('popup.partialSuccess', { success: successCount, fail: failCount }))
+        const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
+        setMessage(text)
+      } else if (results.length > 0) {
+        setStatus('success')
+        setMessage(t('popup.partialSuccess', { success: results.length, fail: failCount }))
       } else throw new Error(t('popup.allUploadFailed'))
       await loadStatus()
     } catch (err) {

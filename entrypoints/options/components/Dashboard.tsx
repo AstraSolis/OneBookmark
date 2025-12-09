@@ -52,7 +52,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   // 批量上传队列状态
   const [pendingPushBackups, setPendingPushBackups] = useState<BackupConfig[]>([])
   const [currentPushBackup, setCurrentPushBackup] = useState<BackupConfig | null>(null)
-  const [pushResults, setPushResults] = useState<{ success: number; fail: number }>({ success: 0, fail: 0 })
+  const [pushResults, setPushResults] = useState<{ items: { name: string; added: number; removed: number }[]; fail: number }>({ items: [], fail: 0 })
   const initialActionHandled = useRef(false)
 
   useEffect(() => {
@@ -205,9 +205,9 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     if (settings.diffPreviewEnabled) {
       // 初始化队列和结果
       setPendingPushBackups(enabled)
-      setPushResults({ success: 0, fail: 0 })
+      setPushResults({ items: [], fail: 0 })
       // 开始处理第一个备份
-      await processNextPushBackup(enabled, { success: 0, fail: 0 })
+      await processNextPushBackup(enabled, { items: [], fail: 0 })
       return
     }
 
@@ -217,7 +217,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   // 处理队列中下一个备份的 diff 预览
   async function processNextPushBackup(
     queue: BackupConfig[],
-    results: { success: number; fail: number }
+    results: { items: { name: string; added: number; removed: number }[]; fail: number }
   ) {
     if (queue.length === 0) {
       // 队列处理完毕，显示结果
@@ -254,16 +254,16 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       }
     }
 
-    // 无变更或无法获取 diff，直接执行上传
-    const newResults = await executeSinglePush(current, results)
-    await processNextPushBackup(rest, newResults)
+    // 无变更，跳过此备份继续下一个
+    await processNextPushBackup(rest, results)
   }
 
   // 执行单个备份的上传
   async function executeSinglePush(
     backup: BackupConfig,
-    results: { success: number; fail: number }
-  ): Promise<{ success: number; fail: number }> {
+    results: { items: { name: string; added: number; removed: number }[]; fail: number },
+    diff?: DiffResult
+  ): Promise<{ items: { name: string; added: number; removed: number }[]; fail: number }> {
     setBatchSyncing('push')
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
@@ -276,45 +276,66 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
         } else {
           await updateBackup(backup.id, { lastSyncTime: Date.now() })
         }
-        return { success: results.success + 1, fail: results.fail }
+        return {
+          items: [...results.items, { name: backup.name, added: diff?.added.length || 0, removed: diff?.removed.length || 0 }],
+          fail: results.fail
+        }
       }
-      return { success: results.success, fail: results.fail + 1 }
+      return { ...results, fail: results.fail + 1 }
     } catch {
-      return { success: results.success, fail: results.fail + 1 }
+      return { ...results, fail: results.fail + 1 }
     } finally {
       setBatchSyncing(null)
     }
   }
 
   // 完成批量上传，显示结果
-  async function finishBatchPush(results: { success: number; fail: number }) {
+  async function finishBatchPush(results: { items: { name: string; added: number; removed: number }[]; fail: number }) {
     setCurrentPushBackup(null)
     setPendingPushBackups([])
-    setPushResults({ success: 0, fail: 0 })
+    setPushResults({ items: [], fail: 0 })
     await loadBackups()
 
-    if (results.success === 0 && results.fail === 0) {
+    if (results.items.length === 0 && results.fail === 0) {
       // 所有备份都没有变更或被跳过
-      setMessage({ type: 'success', text: t('popup.noChanges') })
+      setMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
     } else if (results.fail === 0) {
-      setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: results.success }) })
-    } else if (results.success === 0) {
+      // 生成每个备份的消息
+      const text = results.items.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
+      setMessage({ type: 'success', text })
+    } else if (results.items.length === 0) {
       setMessage({ type: 'error', text: t('popup.uploadFailed') })
     } else {
-      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.success, fail: results.fail }) })
+      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.items.length, fail: results.fail }) })
     }
   }
 
-  // 执行批量上传
+  // 执行批量上传（差异预览未启用时）
   async function executeBatchPush() {
     const enabled = await getUploadEnabledBackups()
     setBatchSyncing('push')
-    let successCount = 0
+    const results: { name: string; added: number; removed: number }[] = []
     let failCount = 0
 
     for (const backup of enabled) {
       try {
         const storage = new GistStorage(backup.token, backup.gistId)
+        let added = 0, removed = 0
+        // 计算 diff
+        if (backup.gistId) {
+          try {
+            const remoteData = await storage.read()
+            const folderPath = backup.folderPath
+            const localBookmarks = folderPath
+              ? await getBookmarksByFolder(folderPath)
+              : await getLocalBookmarks()
+            const remoteBookmarks = remoteData?.bookmarks || []
+            const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
+            if (!diff.hasChanges) continue // 没有变化，跳过
+            added = diff.added.length
+            removed = diff.removed.length
+          } catch { /* 获取 diff 失败，继续执行 */ }
+        }
         const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
         const result = await engine.push()
         if (result.success) {
@@ -324,7 +345,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
           } else {
             await updateBackup(backup.id, { lastSyncTime: Date.now() })
           }
-          successCount++
+          results.push({ name: backup.name, added, removed })
         } else {
           failCount++
         }
@@ -335,10 +356,15 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
 
     setBatchSyncing(null)
     await loadBackups()
-    if (failCount === 0) {
-      setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: successCount }) })
+    if (results.length === 0 && failCount === 0) {
+      setMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
+    } else if (failCount === 0) {
+      const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
+      setMessage({ type: 'success', text })
+    } else if (results.length > 0) {
+      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.length, fail: failCount }) })
     } else {
-      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: successCount, fail: failCount }) })
+      setMessage({ type: 'error', text: t('popup.uploadFailed') })
     }
   }
 
@@ -417,11 +443,12 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   // 差异预览确认
   async function handleDiffConfirm() {
     setShowDiffModal(false)
+    const currentDiff = diffResult
     setDiffResult(null)
 
     if (diffAction === 'push' && currentPushBackup) {
       // 执行当前备份的上传，然后继续处理队列
-      const newResults = await executeSinglePush(currentPushBackup, pushResults)
+      const newResults = await executeSinglePush(currentPushBackup, pushResults, currentDiff || undefined)
       setDiffAction(null)
       await processNextPushBackup(pendingPushBackups, newResults)
     } else if (diffAction === 'pull' && pendingPullBackup) {
@@ -457,18 +484,19 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     setCurrentPushBackup(null)
     setPendingPushBackups([])
 
-    if (pushResults.success > 0 || pushResults.fail > 0) {
+    if (pushResults.items.length > 0 || pushResults.fail > 0) {
       loadBackups()
-      if (pushResults.fail === 0 && pushResults.success > 0) {
-        setMessage({ type: 'success', text: t('popup.uploadSuccess', { count: pushResults.success }) })
-      } else if (pushResults.success > 0) {
+      if (pushResults.fail === 0 && pushResults.items.length > 0) {
+        const text = pushResults.items.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
+        setMessage({ type: 'success', text })
+      } else if (pushResults.items.length > 0) {
         setMessage({
           type: 'error',
-          text: t('popup.partialSuccess', { success: pushResults.success, fail: pushResults.fail }),
+          text: t('popup.partialSuccess', { success: pushResults.items.length, fail: pushResults.fail }),
         })
       }
     }
-    setPushResults({ success: 0, fail: 0 })
+    setPushResults({ items: [], fail: 0 })
   }
 
   const enabledCount = backups.filter(b => b.enabled).length
@@ -559,6 +587,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
                 onToggleUpload={() => handleToggleUpload(backup.id)}
                 onToggleDownload={() => handleToggleDownload(backup.id)}
                 onUpdate={loadBackups}
+                onMessage={setMessage}
               />
             ))}
           </div>
@@ -612,9 +641,10 @@ interface BackupCardProps {
   onToggleUpload: () => void
   onToggleDownload: () => void
   onUpdate: () => void
+  onMessage: (msg: { type: 'success' | 'error'; text: string }) => void
 }
 
-function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate }: BackupCardProps) {
+function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate, onMessage }: BackupCardProps) {
   const { t } = useTranslation()
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -632,10 +662,32 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
   }, [])
 
   async function handlePush() {
-    if (await isLocked()) return
+    if (await isLocked()) {
+      onMessage({ type: 'error', text: t('popup.operationLocked') })
+      return
+    }
     setSyncing(true)
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
+      let added = 0, removed = 0
+      // 计算 diff
+      if (backup.gistId) {
+        try {
+          const remoteData = await storage.read()
+          const folderPath = backup.folderPath
+          const localBookmarks = folderPath
+            ? await getBookmarksByFolder(folderPath)
+            : await getLocalBookmarks()
+          const remoteBookmarks = remoteData?.bookmarks || []
+          const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
+          if (!diff.hasChanges) {
+            onMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
+            return
+          }
+          added = diff.added.length
+          removed = diff.removed.length
+        } catch { /* 获取 diff 失败，继续执行 */ }
+      }
       const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
       const result = await engine.push()
       if (result.success) {
@@ -645,9 +697,13 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
         } else {
           await updateBackup(backup.id, { lastSyncTime: Date.now() })
         }
+        onMessage({ type: 'success', text: t('popup.uploadSuccess', { name: backup.name, added, removed }) })
+      } else {
+        onMessage({ type: 'error', text: t('popup.uploadFailed') })
       }
       onUpdate()
     } catch (err) {
+      onMessage({ type: 'error', text: t('popup.uploadFailed') })
       console.error('上传失败:', err)
     } finally {
       setSyncing(false)
@@ -656,7 +712,10 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
   }
 
   async function handlePull() {
-    if (await isLocked()) return
+    if (await isLocked()) {
+      onMessage({ type: 'error', text: t('popup.operationLocked') })
+      return
+    }
     setRestoring(true)
     try {
       const storage = new GistStorage(backup.token, backup.gistId)
@@ -664,9 +723,13 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
+        onMessage({ type: 'success', text: t('popup.downloadSuccess') })
+      } else {
+        onMessage({ type: 'error', text: t('popup.downloadFailed') })
       }
       onUpdate()
     } catch (err) {
+      onMessage({ type: 'error', text: t('popup.downloadFailed') })
       console.error('下载失败:', err)
     } finally {
       setRestoring(false)
