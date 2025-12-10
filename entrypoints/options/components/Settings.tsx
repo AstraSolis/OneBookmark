@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getEnabledBackups, getSettings, updateSettings, type BackgroundSettings } from '@/utils/storage'
 import { LanguageCards } from '@/lib/i18n/LanguageCards'
-import { FadeInUp, HoverScale, Switch, AnimatePresence, motion, springPresets } from '@/lib/motion'
+import { FadeInUp, HoverScale, Switch } from '@/lib/motion'
+import { Toast, createToastId, type ToastMessage } from './Toast'
 
 export function Settings() {
   const { t, i18n } = useTranslation()
@@ -10,11 +11,18 @@ export function Settings() {
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
   const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
   const [bgUrlInput, setBgUrlInput] = useState('')
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [messages, setMessages] = useState<ToastMessage[]>([])
 
   function showMessage(type: 'success' | 'error', text: string) {
-    setMessage({ type, text })
-    setTimeout(() => setMessage(null), 2000)
+    const id = createToastId()
+    setMessages((prev) => [...prev, { id, type, text }])
+    setTimeout(() => {
+      setMessages((prev) => prev.filter((m) => m.id !== id))
+    }, 3000)
+  }
+
+  function removeMessage(id: string) {
+    setMessages((prev) => prev.filter((m) => m.id !== id))
   }
 
   useEffect(() => {
@@ -82,19 +90,7 @@ export function Settings() {
       <div className="w-full">
         <h1 className="text-2xl font-bold text-gray-800 mb-6 tracking-tight">{t('settings.title')}</h1>
 
-        <AnimatePresence>
-          {message && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={springPresets.snappy}
-              className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-sky-50 text-sky-600'}`}
-            >
-              {message.text}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <Toast messages={messages} onRemove={removeMessage} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 同步信息 */}

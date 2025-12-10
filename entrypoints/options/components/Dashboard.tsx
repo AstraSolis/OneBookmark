@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import { Toast, createToastId, type ToastMessage } from './Toast'
 import {
   getBackups,
   getUploadEnabledBackups,
@@ -42,7 +43,19 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   const [showModal, setShowModal] = useState(false)
   const [showPullModal, setShowPullModal] = useState(false)
   const [editingBackup, setEditingBackup] = useState<BackupConfig | null>(null)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [messages, setMessages] = useState<ToastMessage[]>([])
+
+  function showMessage(type: 'success' | 'error', text: string) {
+    const id = createToastId()
+    setMessages((prev) => [...prev, { id, type, text }])
+    setTimeout(() => {
+      setMessages((prev) => prev.filter((m) => m.id !== id))
+    }, 3000)
+  }
+
+  function removeMessage(id: string) {
+    setMessages((prev) => prev.filter((m) => m.id !== id))
+  }
   const [batchSyncing, setBatchSyncing] = useState<'push' | 'pull' | null>(null)
   // 差异预览相关状态
   const [showDiffModal, setShowDiffModal] = useState(false)
@@ -130,9 +143,9 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     try {
       await deleteBackup(id)
       await loadBackups()
-      setMessage({ type: 'success', text: t('dashboard.backupDeleted') })
+      showMessage('success', t('dashboard.backupDeleted'))
     } catch {
-      setMessage({ type: 'error', text: t('dashboard.deleteFailed') })
+      showMessage('error', t('dashboard.deleteFailed'))
     }
   }
 
@@ -166,7 +179,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
           gistId: data.gistId || null,
           folderPath: data.folderPath
         })
-        setMessage({ type: 'success', text: t('dashboard.backupUpdated') })
+        showMessage('success', t('dashboard.backupUpdated'))
       } else {
         await addBackup({
           name: data.name || 'GitHub Gist',
@@ -179,12 +192,12 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
           lastSyncTime: null,
           folderPath: data.folderPath
         })
-        setMessage({ type: 'success', text: t('dashboard.backupAdded') })
+        showMessage('success', t('dashboard.backupAdded'))
       }
       await loadBackups()
       setShowModal(false)
     } catch {
-      setMessage({ type: 'error', text: t('dashboard.saveFailed') })
+      showMessage('error', t('dashboard.saveFailed'))
     }
   }
 
@@ -192,11 +205,11 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   async function handleBatchPush() {
     const enabled = await getUploadEnabledBackups()
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: t('popup.noUploadBackup') })
+      showMessage('error', t('popup.noUploadBackup'))
       return
     }
     if (await isLocked()) {
-      setMessage({ type: 'error', text: t('popup.operationLocked') })
+      showMessage('error', t('popup.operationLocked'))
       return
     }
 
@@ -298,15 +311,15 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
 
     if (results.items.length === 0 && results.fail === 0) {
       // 所有备份都没有变更或被跳过
-      setMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
+      showMessage('success', t('popup.uploadSuccessNoChanges'))
     } else if (results.fail === 0) {
       // 生成每个备份的消息
       const text = results.items.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
-      setMessage({ type: 'success', text })
+      showMessage('success', text)
     } else if (results.items.length === 0) {
-      setMessage({ type: 'error', text: t('popup.uploadFailed') })
+      showMessage('error', t('popup.uploadFailed'))
     } else {
-      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.items.length, fail: results.fail }) })
+      showMessage('error', t('popup.partialSuccess', { success: results.items.length, fail: results.fail }))
     }
   }
 
@@ -357,14 +370,14 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     setBatchSyncing(null)
     await loadBackups()
     if (results.length === 0 && failCount === 0) {
-      setMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
+      showMessage('success', t('popup.uploadSuccessNoChanges'))
     } else if (failCount === 0) {
       const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
-      setMessage({ type: 'success', text })
+      showMessage('success', text)
     } else if (results.length > 0) {
-      setMessage({ type: 'error', text: t('popup.partialSuccess', { success: results.length, fail: failCount }) })
+      showMessage('error', t('popup.partialSuccess', { success: results.length, fail: failCount }))
     } else {
-      setMessage({ type: 'error', text: t('popup.uploadFailed') })
+      showMessage('error', t('popup.uploadFailed'))
     }
   }
 
@@ -372,7 +385,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   function handleBatchPull() {
     const enabled = backups.filter(b => b.enabled && b.downloadEnabled !== false)
     if (enabled.length === 0) {
-      setMessage({ type: 'error', text: t('popup.noDownloadBackup') })
+      showMessage('error', t('popup.noDownloadBackup'))
       return
     }
     setShowPullModal(true)
@@ -381,7 +394,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   // 从指定备份下载
   async function handlePullFromBackup(backup: BackupWithProfile) {
     if (await isLocked()) {
-      setMessage({ type: 'error', text: t('popup.operationLocked') })
+      showMessage('error', t('popup.operationLocked'))
       return
     }
 
@@ -428,12 +441,12 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
-        setMessage({ type: 'success', text: t('popup.downloadSuccess') })
+        showMessage('success', t('popup.downloadSuccess'))
       } else {
-        setMessage({ type: 'error', text: t('popup.downloadFailed') })
+        showMessage('error', t('popup.downloadFailed'))
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : t('popup.downloadFailed') })
+      showMessage('error', err instanceof Error ? err.message : t('popup.downloadFailed'))
     }
 
     setBatchSyncing(null)
@@ -488,12 +501,9 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       loadBackups()
       if (pushResults.fail === 0 && pushResults.items.length > 0) {
         const text = pushResults.items.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
-        setMessage({ type: 'success', text })
+        showMessage('success', text)
       } else if (pushResults.items.length > 0) {
-        setMessage({
-          type: 'error',
-          text: t('popup.partialSuccess', { success: pushResults.items.length, fail: pushResults.fail }),
-        })
+        showMessage('error', t('popup.partialSuccess', { success: pushResults.items.length, fail: pushResults.fail }))
       }
     }
     setPushResults({ items: [], fail: 0 })
@@ -544,19 +554,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
           </div>
         </div>
 
-        <AnimatePresence>
-          {message && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={springPresets.snappy}
-              className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-sky-50 text-sky-600'}`}
-            >
-              {message.text}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <Toast messages={messages} onRemove={removeMessage} />
 
         {loading ? (
           <div className="space-y-3">
@@ -587,7 +585,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
                 onToggleUpload={() => handleToggleUpload(backup.id)}
                 onToggleDownload={() => handleToggleDownload(backup.id)}
                 onUpdate={loadBackups}
-                onMessage={setMessage}
+                onMessage={showMessage}
               />
             ))}
           </div>
@@ -641,7 +639,7 @@ interface BackupCardProps {
   onToggleUpload: () => void
   onToggleDownload: () => void
   onUpdate: () => void
-  onMessage: (msg: { type: 'success' | 'error'; text: string }) => void
+  onMessage: (type: 'success' | 'error', text: string) => void
 }
 
 function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload, onToggleDownload, onUpdate, onMessage }: BackupCardProps) {
@@ -663,7 +661,7 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
 
   async function handlePush() {
     if (await isLocked()) {
-      onMessage({ type: 'error', text: t('popup.operationLocked') })
+      onMessage('error', t('popup.operationLocked'))
       return
     }
     setSyncing(true)
@@ -681,7 +679,7 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
           const remoteBookmarks = remoteData?.bookmarks || []
           const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
           if (!diff.hasChanges) {
-            onMessage({ type: 'success', text: t('popup.uploadSuccessNoChanges') })
+            onMessage('success', t('popup.uploadSuccessNoChanges'))
             return
           }
           added = diff.added.length
@@ -697,13 +695,13 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
         } else {
           await updateBackup(backup.id, { lastSyncTime: Date.now() })
         }
-        onMessage({ type: 'success', text: t('popup.uploadSuccess', { name: backup.name, added, removed }) })
+        onMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
       } else {
-        onMessage({ type: 'error', text: t('popup.uploadFailed') })
+        onMessage('error', t('popup.uploadFailed'))
       }
       onUpdate()
     } catch (err) {
-      onMessage({ type: 'error', text: t('popup.uploadFailed') })
+      onMessage('error', t('popup.uploadFailed'))
       console.error('上传失败:', err)
     } finally {
       setSyncing(false)
@@ -713,7 +711,7 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
 
   async function handlePull() {
     if (await isLocked()) {
-      onMessage({ type: 'error', text: t('popup.operationLocked') })
+      onMessage('error', t('popup.operationLocked'))
       return
     }
     setRestoring(true)
@@ -723,13 +721,13 @@ function BackupCard({ backup, index, onEdit, onDelete, onToggle, onToggleUpload,
       const result = await engine.pull()
       if (result.success) {
         await updateBackup(backup.id, { lastSyncTime: Date.now() })
-        onMessage({ type: 'success', text: t('popup.downloadSuccess') })
+        onMessage('success', t('popup.downloadSuccess'))
       } else {
-        onMessage({ type: 'error', text: t('popup.downloadFailed') })
+        onMessage('error', t('popup.downloadFailed'))
       }
       onUpdate()
     } catch (err) {
-      onMessage({ type: 'error', text: t('popup.downloadFailed') })
+      onMessage('error', t('popup.downloadFailed'))
       console.error('下载失败:', err)
     } finally {
       setRestoring(false)
