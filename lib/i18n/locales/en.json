@@ -120,6 +120,8 @@
     "saveFailed": "Save failed",
     "selectSource": "Select download source",
     "selectSourceHint": "Select a backup source to download, will overwrite local bookmarks",
+    "selectUploadTarget": "Select upload target",
+    "selectUploadHint": "Select a backup target to upload, will overwrite remote bookmarks",
     "disableUpload": "Disable upload",
     "enableUpload": "Enable upload",
     "disableDownload": "Disable download",

@@ -1,11 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { GistStorage } from '@/lib/storage/gist'
-import { SyncEngine, isLocked } from '@/lib/sync'
-import { getLocalBookmarks, getBookmarksByFolder } from '@/lib/bookmark/parser'
+import { isLocked, pushBookmarks, pullBookmarks, getBookmarksForBackup } from '@/lib/sync'
 import { htmlFormat } from '@/lib/bookmark/formats'
-import { calculateDiff } from '@/lib/bookmark/diff'
-import { updateBackup } from '@/utils/storage'
 import { FadeInUp, HoverScale, AnimatePresence, Switch, motion, springPresets } from '@/lib/motion'
 import { Spinner, UploadIcon, DownloadIcon, ExportIcon, EditIcon, DeleteIcon, MoreIcon, ExternalLinkIcon } from './icons'
 import type { BackupWithProfile } from './types'
@@ -45,43 +41,20 @@ export function BackupCard({ backup, index, onEdit, onDelete, onToggleUpload, on
     }
     setSyncing(true)
     try {
-      const storage = new GistStorage(backup.token, backup.gistId)
-      let added = 0, removed = 0
-      // 计算 diff
-      if (backup.gistId) {
-        try {
-          const remoteData = await storage.read()
-          const folderPath = backup.folderPath
-          const localBookmarks = folderPath
-            ? await getBookmarksByFolder(folderPath)
-            : await getLocalBookmarks()
-          const remoteBookmarks = remoteData?.bookmarks || []
-          const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
-          if (!diff.hasChanges) {
-            onMessage('success', t('popup.uploadSuccessNoChanges'))
-            return
-          }
-          added = diff.added.length
-          removed = diff.removed.length
-        } catch { /* 获取 diff 失败，继续执行 */ }
-      }
-      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
-      const result = await engine.push()
+      const result = await pushBookmarks(backup)
       if (result.success) {
-        const gistId = storage.getGistId()
-        if (gistId && gistId !== backup.gistId) {
-          await updateBackup(backup.id, { gistId, lastSyncTime: Date.now() })
+        const { added = 0, removed = 0 } = result.diff || {}
+        if (added === 0 && removed === 0) {
+          onMessage('success', t('popup.uploadSuccessNoChanges'))
         } else {
-          await updateBackup(backup.id, { lastSyncTime: Date.now() })
+          onMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
         }
-        onMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
       } else {
         onMessage('error', t('popup.uploadFailed'))
       }
       onUpdate()
-    } catch (err) {
+    } catch {
       onMessage('error', t('popup.uploadFailed'))
-      console.error('上传失败:', err)
     } finally {
       setSyncing(false)
       setShowMenu(false)
@@ -95,19 +68,15 @@ export function BackupCard({ backup, index, onEdit, onDelete, onToggleUpload, on
     }
     setRestoring(true)
     try {
-      const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
-      const result = await engine.pull()
+      const result = await pullBookmarks(backup)
       if (result.success) {
-        await updateBackup(backup.id, { lastSyncTime: Date.now() })
         onMessage('success', t('popup.downloadSuccess'))
       } else {
-        onMessage('error', t('popup.downloadFailed'))
+        onMessage('error', result.error || t('popup.downloadFailed'))
       }
       onUpdate()
-    } catch (err) {
+    } catch {
       onMessage('error', t('popup.downloadFailed'))
-      console.error('下载失败:', err)
     } finally {
       setRestoring(false)
       setShowMenu(false)
@@ -116,9 +85,7 @@ export function BackupCard({ backup, index, onEdit, onDelete, onToggleUpload, on
 
   async function handleExportHtml() {
     try {
-      const bookmarks = backup.folderPath
-        ? await getBookmarksByFolder(backup.folderPath)
-        : await getLocalBookmarks()
+      const bookmarks = await getBookmarksForBackup(backup)
       const html = htmlFormat.serialize(bookmarks)
       const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
       const url = URL.createObjectURL(blob)

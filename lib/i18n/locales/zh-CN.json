@@ -120,6 +120,8 @@
     "saveFailed": "保存失败",
     "selectSource": "选择下载源",
     "selectSourceHint": "选择一个备份源下载，将覆盖本地书签",
+    "selectUploadTarget": "选择上传目标",
+    "selectUploadHint": "选择一个备份目标上传，将覆盖远端书签",
     "disableUpload": "禁用上传",
     "enableUpload": "启用上传",
     "disableDownload": "禁用下载",

@@ -14,7 +14,7 @@ import { useSyncOperations } from '../hooks/useSyncOperations'
 import {
   BackupCard,
   BackupModal,
-  PullSelectModal,
+  BackupSelectModal,
   DiffPreviewModal,
   Spinner,
   UploadIcon,
@@ -35,7 +35,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
   const [backups, setBackups] = useState<BackupWithProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [showPullModal, setShowPullModal] = useState(false)
+  const [showSelectModal, setShowSelectModal] = useState<'push' | 'pull' | null>(null)
   const [editingBackup, setEditingBackup] = useState<BackupConfig | null>(null)
   const [messages, setMessages] = useState<ToastMessage[]>([])
   const initialActionHandled = useRef(false)
@@ -56,6 +56,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     batchSyncing,
     diffState,
     handleBatchPush,
+    handlePushToBackup,
     handlePullFromBackup,
     handleDiffConfirm,
     handleDiffCancel,
@@ -82,7 +83,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
         const backup = backups.find(b => b.id === initialAction.backupId)
         if (backup) handlePullFromBackup(backup)
       } else {
-        handleBatchPull()
+        handlePullClick()
       }
     }
     onActionHandled?.()
@@ -193,18 +194,32 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
     }
   }
 
-  function handleBatchPull() {
-    const enabled = backups.filter(b => b.enabled && b.downloadEnabled !== false)
+  function handlePushClick() {
+    const enabled = backups.filter(b => b.enabled)
+    if (enabled.length === 0) {
+      showMessage('error', t('popup.noUploadBackup'))
+      return
+    }
+    setShowSelectModal('push')
+  }
+
+  function handlePullClick() {
+    const enabled = backups.filter(b => b.enabled)
     if (enabled.length === 0) {
       showMessage('error', t('popup.noDownloadBackup'))
       return
     }
-    setShowPullModal(true)
+    setShowSelectModal('pull')
   }
 
-  function handleSelectPullBackup(backup: BackupWithProfile) {
-    setShowPullModal(false)
-    handlePullFromBackup(backup)
+  function handleSelectBackup(backup: BackupWithProfile) {
+    const action = showSelectModal
+    setShowSelectModal(null)
+    if (action === 'push') {
+      handlePushToBackup(backup)
+    } else {
+      handlePullFromBackup(backup)
+    }
   }
 
   const enabledCount = backups.filter(b => b.enabled).length
@@ -223,7 +238,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
             {backups.length > 0 && (
               <>
                 <PressScale
-                  onClick={handleBatchPush}
+                  onClick={handlePushClick}
                   disabled={batchSyncing !== null || enabledCount === 0}
                   className="flex items-center gap-2 px-4 py-2 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-colors shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -231,7 +246,7 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
                   {t('popup.upload')}
                 </PressScale>
                 <PressScale
-                  onClick={handleBatchPull}
+                  onClick={handlePullClick}
                   disabled={batchSyncing !== null || enabledCount === 0}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-400 text-white text-sm font-medium rounded-xl hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -281,11 +296,12 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
         onClose={() => setShowModal(false)}
         onSubmit={handleModalSubmit}
       />
-      <PullSelectModal
-        isOpen={showPullModal}
-        backups={backups.filter(b => b.enabled && b.downloadEnabled !== false)}
-        onClose={() => setShowPullModal(false)}
-        onSelect={handleSelectPullBackup}
+      <BackupSelectModal
+        isOpen={showSelectModal !== null}
+        backups={backups.filter(b => b.enabled)}
+        action={showSelectModal || 'pull'}
+        onClose={() => setShowSelectModal(null)}
+        onSelect={handleSelectBackup}
       />
       <DiffPreviewModal
         isOpen={diffState.showModal}

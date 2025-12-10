@@ -1,18 +1,20 @@
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, Overlay, ScaleIn, motion, springPresets } from '@/lib/motion'
 import { Portal } from './Portal'
-import { CloseIcon, DownloadIcon } from './icons'
+import { CloseIcon, UploadIcon, DownloadIcon } from './icons'
 import type { BackupWithProfile } from './types'
 
-interface PullSelectModalProps {
+interface BackupSelectModalProps {
   isOpen: boolean
   backups: BackupWithProfile[]
+  action: 'push' | 'pull'
   onClose: () => void
   onSelect: (backup: BackupWithProfile) => void
 }
 
-export function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSelectModalProps) {
+export function BackupSelectModal({ isOpen, backups, action, onClose, onSelect }: BackupSelectModalProps) {
   const { t } = useTranslation()
+  const isPush = action === 'push'
 
   return (
     <Portal>
@@ -22,7 +24,9 @@ export function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSele
             <Overlay onClick={onClose} />
             <ScaleIn className="relative bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h3 className="text-lg font-semibold text-slate-800">{t('dashboard.selectSource')}</h3>
+                <h3 className="text-lg font-semibold text-slate-800">
+                  {isPush ? t('dashboard.selectUploadTarget') : t('dashboard.selectSource')}
+                </h3>
                 <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded">
                   <CloseIcon />
                 </button>
@@ -52,12 +56,14 @@ export function PullSelectModal({ isOpen, backups, onClose, onSelect }: PullSele
                           : t('popup.neverSynced')}
                       </div>
                     </div>
-                    <DownloadIcon />
+                    {isPush ? <UploadIcon /> : <DownloadIcon />}
                   </motion.button>
                 ))}
               </div>
               <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                <p className="text-xs text-slate-400 text-center">{t('dashboard.selectSourceHint')}</p>
+                <p className="text-xs text-slate-400 text-center">
+                  {isPush ? t('dashboard.selectUploadHint') : t('dashboard.selectSourceHint')}
+                </p>
               </div>
             </ScaleIn>
           </div>

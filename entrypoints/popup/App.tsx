@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, updateBackup, getSettings, type BackupConfig } from '@/utils/storage'
-import { getLocalBookmarks, getBookmarksByFolder } from '@/lib/bookmark/parser'
+import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, getSettings, type BackupConfig } from '@/utils/storage'
+import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
-import { SyncEngine, getLockStatus, forceReleaseLock } from '@/lib/sync'
-import { calculateDiff } from '@/lib/bookmark/diff'
+import { getLockStatus, forceReleaseLock, pushBookmarks, pullBookmarks, calculateSyncDiff } from '@/lib/sync'
 import type { SyncStatus } from '@/lib/bookmark/types'
 import { motion, AnimatePresence, PressScale, springPresets, CheckIcon, CrossIcon } from '@/lib/motion'
 
@@ -14,6 +13,7 @@ interface BackupWithProfile extends BackupConfig {
 }
 
 function App() {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<SyncStatus>('idle')
   const [message, setMessage] = useState('')
   const [lastSync, setLastSync] = useState<string | null>(null)
@@ -56,7 +56,6 @@ function App() {
     const uploadEnabled = await getUploadEnabledBackups()
     const downloadEnabled = await getDownloadEnabledBackups()
     
-    // 加载启用备份的 profile
     async function loadProfiles(list: BackupConfig[]): Promise<BackupWithProfile[]> {
       return Promise.all(
         list.map(async (backup) => {
@@ -86,6 +85,17 @@ function App() {
     setStatus('idle')
   }
 
+  function openOptionsWithAction(action: 'push' | 'pull', backupId?: string) {
+    const params = new URLSearchParams({ action })
+    if (backupId) params.set('backupId', backupId)
+    browser.tabs.create({ url: browser.runtime.getURL(`/options.html#${params}`) })
+  }
+
+  function openOptions() {
+    browser.tabs.create({ url: browser.runtime.getURL('/options.html') })
+  }
+
+
   async function handlePush() {
     if (uploadBackups.length === 0) {
       setStatus('error')
@@ -104,32 +114,14 @@ function App() {
     // 检查是否启用差异预览
     const settings = await getSettings()
     if (settings.diffPreviewEnabled && uploadBackups[0].gistId) {
-      try {
-        const storage = new GistStorage(uploadBackups[0].token, uploadBackups[0].gistId)
-        const remoteData = await storage.read()
-        // 使用与实际同步相同的文件夹路径获取本地书签
-        const folderPath = uploadBackups[0].folderPath
-        const localBookmarks = folderPath
-          ? await getBookmarksByFolder(folderPath)
-          : await getLocalBookmarks()
-        const remoteBookmarks = remoteData?.bookmarks || []
-        // 如果使用了文件夹同步，跳过根路径比较
-        const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
-        if (diff.hasChanges) {
-          // 跳转到 options 页面显示差异预览
-          openOptionsWithAction('push')
-          return
-        }
-      } catch { /* 获取差异失败，继续执行 */ }
+      const diff = await calculateSyncDiff(uploadBackups[0], 'push')
+      if (diff?.hasChanges) {
+        openOptionsWithAction('push')
+        return
+      }
     }
 
     await executePush()
-  }
-
-  function openOptionsWithAction(action: 'push' | 'pull', backupId?: string) {
-    const params = new URLSearchParams({ action })
-    if (backupId) params.set('backupId', backupId)
-    browser.tabs.create({ url: browser.runtime.getURL(`/options.html#${params}`) })
   }
 
   async function executePush() {
@@ -140,33 +132,17 @@ function App() {
     try {
       const results: { name: string; added: number; removed: number }[] = []
       let failCount = 0
+
       for (const backup of uploadBackups) {
-        try {
-          const storage = new GistStorage(backup.token, backup.gistId)
-          let added = 0, removed = 0
-          // 计算 diff
-          if (backup.gistId) {
-            try {
-              const remoteData = await storage.read()
-              const folderPath = backup.folderPath
-              const localBookmarks = folderPath
-                ? await getBookmarksByFolder(folderPath)
-                : await getLocalBookmarks()
-              const remoteBookmarks = remoteData?.bookmarks || []
-              const diff = calculateDiff(remoteBookmarks, localBookmarks, { skipRootPath: !!folderPath })
-              if (!diff.hasChanges) continue // 没有变化，跳过
-              added = diff.added.length
-              removed = diff.removed.length
-            } catch { /* 获取 diff 失败，继续执行 */ }
-          }
-          const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
-          const result = await engine.push()
-          if (result.success) {
-            const gistId = storage.getGistId()
-            await updateBackup(backup.id, { gistId: gistId !== backup.gistId ? gistId : backup.gistId, lastSyncTime: Date.now() })
+        const result = await pushBookmarks(backup)
+        if (result.success) {
+          const { added = 0, removed = 0 } = result.diff || {}
+          if (added > 0 || removed > 0) {
             results.push({ name: backup.name, added, removed })
-          } else failCount++
-        } catch { failCount++ }
+          }
+        } else {
+          failCount++
+        }
       }
 
       if (results.length === 0 && failCount === 0) {
@@ -179,7 +155,9 @@ function App() {
       } else if (results.length > 0) {
         setStatus('success')
         setMessage(t('popup.partialSuccess', { success: results.length, fail: failCount }))
-      } else throw new Error(t('popup.allUploadFailed'))
+      } else {
+        throw new Error(t('popup.allUploadFailed'))
+      }
       await loadStatus()
     } catch (err) {
       setStatus('error')
@@ -193,7 +171,6 @@ function App() {
       setMessage(t('popup.noDownloadBackup'))
       return
     }
-    // 多个备份源时跳转到 options 页面选择
     if (downloadBackups.length > 1) {
       openOptionsWithAction('pull')
       return
@@ -210,27 +187,13 @@ function App() {
       return
     }
 
-    // 检查是否启用差异预览
     const settings = await getSettings()
     if (settings.diffPreviewEnabled && backup.gistId) {
-      try {
-        const storage = new GistStorage(backup.token, backup.gistId)
-        const remoteData = await storage.read()
-        if (remoteData) {
-          // 使用与实际同步相同的文件夹路径获取本地书签
-          const folderPath = backup.folderPath
-          const localBookmarks = folderPath
-            ? await getBookmarksByFolder(folderPath)
-            : await getLocalBookmarks()
-          // 如果使用了文件夹同步，跳过根路径比较
-          const diff = calculateDiff(localBookmarks, remoteData.bookmarks, { skipRootPath: !!folderPath })
-          if (diff.hasChanges) {
-            // 跳转到 options 页面显示差异预览
-            openOptionsWithAction('pull', backup.id)
-            return
-          }
-        }
-      } catch { /* 获取差异失败，继续执行 */ }
+      const diff = await calculateSyncDiff(backup, 'pull')
+      if (diff?.hasChanges) {
+        openOptionsWithAction('pull', backup.id)
+        return
+      }
     }
 
     await executePullFromBackup(backup)
@@ -242,18 +205,14 @@ function App() {
     setLockInfo(null)
 
     try {
-      const storage = new GistStorage(backup.token, backup.gistId)
-      const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
-      const result = await engine.pull()
-
+      const result = await pullBookmarks(backup)
       if (result.success) {
-        await updateBackup(backup.id, { lastSyncTime: Date.now() })
         setStatus('success')
         setMessage(t('popup.downloadSuccess'))
         await loadStatus()
         setTimeout(() => loadBookmarkStats(), 500)
       } else {
-        throw new Error(t('popup.downloadFailed'))
+        throw new Error(result.error || t('popup.downloadFailed'))
       }
     } catch (err) {
       setStatus('error')
@@ -261,11 +220,6 @@ function App() {
     }
   }
 
-  function openOptions() {
-    browser.tabs.create({ url: browser.runtime.getURL('/options.html') })
-  }
-
-  const { t } = useTranslation()
   const isSyncing = status === 'syncing'
   const uploadCount = uploadBackups.length
   const downloadCount = downloadBackups.length
@@ -373,7 +327,6 @@ function App() {
           </div>
         )}
       </div>
-
     </div>
   )
 }
