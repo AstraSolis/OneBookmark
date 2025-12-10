@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { GistStorage } from '@/lib/storage/gist'
 import { SyncEngine, isLocked } from '@/lib/sync'
 import { getLocalBookmarks, getBookmarksByFolder } from '@/lib/bookmark/parser'
 import { calculateDiff, type DiffResult } from '@/lib/bookmark/diff'
-import { getUploadEnabledBackups, getSettings, updateBackup, type BackupConfig } from '@/utils/storage'
+import { getSettings, updateBackup, type BackupConfig } from '@/utils/storage'
 import type { BackupWithProfile, SyncingState, PushResults } from '../components/dashboard-components/types'
 
 interface DiffPreviewState {
@@ -36,10 +36,15 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     pushResults: { items: [], fail: 0 }
   })
 
+  // 从传入的 backups 中筛选启用上传的备份
+  const uploadEnabledBackups = useMemo(
+    () => backups.filter(b => b.enabled && b.uploadEnabled !== false),
+    [backups]
+  )
+
   // 批量上传到所有启用的备份
   const handleBatchPush = useCallback(async () => {
-    const enabled = await getUploadEnabledBackups()
-    if (enabled.length === 0) {
+    if (uploadEnabledBackups.length === 0) {
       showMessage('error', t('popup.noUploadBackup'))
       return
     }
@@ -52,15 +57,15 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     if (settings.diffPreviewEnabled) {
       setDiffState(prev => ({
         ...prev,
-        pendingPushBackups: enabled,
+        pendingPushBackups: uploadEnabledBackups,
         pushResults: { items: [], fail: 0 }
       }))
-      await processNextPushBackup(enabled, { items: [], fail: 0 })
+      await processNextPushBackup(uploadEnabledBackups, { items: [], fail: 0 })
       return
     }
 
     await executeBatchPush()
-  }, [t, showMessage])
+  }, [t, showMessage, uploadEnabledBackups])
 
   // 处理队列中下一个备份的 diff 预览
   async function processNextPushBackup(
@@ -163,12 +168,11 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
 
   // 执行批量上传（差异预览未启用时）
   async function executeBatchPush() {
-    const enabled = await getUploadEnabledBackups()
     setBatchSyncing('push')
     const results: { name: string; added: number; removed: number }[] = []
     let failCount = 0
 
-    for (const backup of enabled) {
+    for (const backup of uploadEnabledBackups) {
       try {
         const storage = new GistStorage(backup.token, backup.gistId)
         let added = 0, removed = 0
