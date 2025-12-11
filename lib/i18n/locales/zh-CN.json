@@ -14,6 +14,16 @@
     "disable": "禁用",
     "loading": "加载中..."
   },
+  "error": {
+    "network": "网络连接失败，请检查网络后重试",
+    "auth": "Token 无效或已过期，请更新 Token",
+    "notFound": "Gist 不存在，请检查 Gist ID",
+    "rateLimit": "请求过于频繁，请稍后再试",
+    "noData": "远端没有数据，请先上传书签",
+    "permission": "权限不足，请检查 Token 权限",
+    "folderNotFound": "本地文件夹不存在",
+    "unknown": "操作失败，请重试"
+  },
   "popup": {
     "welcome": "欢迎使用",
     "configFirst": "请先配置备份以开始同步",

@@ -14,6 +14,16 @@
     "disable": "Disable",
     "loading": "Loading..."
   },
+  "error": {
+    "network": "Network error, please check your connection",
+    "auth": "Token invalid or expired, please update",
+    "notFound": "Gist not found, please check Gist ID",
+    "rateLimit": "Too many requests, please try later",
+    "noData": "No remote data, please upload first",
+    "permission": "Permission denied, please check token permissions",
+    "folderNotFound": "Local folder not found",
+    "unknown": "Operation failed, please retry"
+  },
   "popup": {
     "welcome": "Welcome",
     "configFirst": "Please configure a backup to start syncing",

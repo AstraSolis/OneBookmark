@@ -1,10 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { isLocked, pushBookmarks, pullBookmarks, getBookmarksForBackup } from '@/lib/sync'
+import { isLocked, pushBookmarks, pullBookmarks, getBookmarksForBackup, getErrorI18nKey, type ErrorType } from '@/lib/sync'
 import { htmlFormat } from '@/lib/bookmark/formats'
 import { FadeInUp, HoverScale, AnimatePresence, Switch, motion, springPresets } from '@/lib/motion'
 import { Spinner, UploadIcon, DownloadIcon, ExportIcon, EditIcon, DeleteIcon, MoreIcon, ExternalLinkIcon } from './icons'
 import type { BackupWithProfile } from './types'
+
+// 根据错误类型获取 i18n 消息
+function getErrorMessage(t: (key: string) => string, errorType?: ErrorType, fallbackKey?: string): string {
+  if (errorType) {
+    return t(getErrorI18nKey(errorType))
+  }
+  return t(fallbackKey || 'error.unknown')
+}
 
 interface BackupCardProps {
   backup: BackupWithProfile
@@ -40,25 +48,20 @@ export function BackupCard({ backup, index, onEdit, onDelete, onToggleUpload, on
       return
     }
     setSyncing(true)
-    try {
-      const result = await pushBookmarks(backup)
-      if (result.success) {
-        const { added = 0, removed = 0 } = result.diff || {}
-        if (added === 0 && removed === 0) {
-          onMessage('success', t('popup.uploadSuccessNoChanges'))
-        } else {
-          onMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
-        }
+    const result = await pushBookmarks(backup)
+    if (result.success) {
+      const { added = 0, removed = 0 } = result.diff || {}
+      if (added === 0 && removed === 0) {
+        onMessage('success', t('popup.uploadSuccessNoChanges'))
       } else {
-        onMessage('error', t('popup.uploadFailed'))
+        onMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
       }
-      onUpdate()
-    } catch {
-      onMessage('error', t('popup.uploadFailed'))
-    } finally {
-      setSyncing(false)
-      setShowMenu(false)
+    } else {
+      onMessage('error', getErrorMessage(t, result.errorType, 'popup.uploadFailed'))
     }
+    onUpdate()
+    setSyncing(false)
+    setShowMenu(false)
   }
 
   async function handlePull() {
@@ -67,20 +70,15 @@ export function BackupCard({ backup, index, onEdit, onDelete, onToggleUpload, on
       return
     }
     setRestoring(true)
-    try {
-      const result = await pullBookmarks(backup)
-      if (result.success) {
-        onMessage('success', t('popup.downloadSuccess'))
-      } else {
-        onMessage('error', result.error || t('popup.downloadFailed'))
-      }
-      onUpdate()
-    } catch {
-      onMessage('error', t('popup.downloadFailed'))
-    } finally {
-      setRestoring(false)
-      setShowMenu(false)
+    const result = await pullBookmarks(backup)
+    if (result.success) {
+      onMessage('success', t('popup.downloadSuccess'))
+    } else {
+      onMessage('error', getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
     }
+    onUpdate()
+    setRestoring(false)
+    setShowMenu(false)
   }
 
   async function handleExportHtml() {

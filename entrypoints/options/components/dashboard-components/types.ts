@@ -1,5 +1,6 @@
 import type { BackupConfig } from '@/utils/storage'
 import type { DiffResult } from '@/lib/bookmark/diff'
+import type { ErrorType } from '@/lib/errors'
 
 // 带 profile 信息的备份配置
 export interface BackupWithProfile extends BackupConfig {
@@ -21,6 +22,7 @@ export type SyncingState = 'push' | 'pull' | null
 export interface PushResults {
   items: { name: string; added: number; removed: number }[]
   fail: number
+  lastErrorType?: ErrorType
 }
 
 // 差异预览状态

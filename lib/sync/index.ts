@@ -8,3 +8,4 @@ export {
   type PushResult,
   type PullResult
 } from './operations'
+export { SyncError, type ErrorType, getErrorI18nKey } from '../errors'

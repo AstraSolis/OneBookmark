@@ -1,5 +1,6 @@
 import type { StorageBackend } from './interface'
 import type { SyncData } from '../bookmark/types'
+import { SyncError, classifyHttpError, classifyFetchError } from '../errors'
 
 const GIST_FILENAME = 'onebookmark.json'
 
@@ -21,6 +22,14 @@ export class GistStorage implements StorageBackend {
     }
   }
 
+  // 处理 API 响应错误
+  private async handleResponseError(res: Response, action: string): Promise<never> {
+    const errorBody = await res.json().catch(() => ({}))
+    const message = errorBody.message || res.statusText
+    console.error(`[GistStorage] ${action} 失败:`, res.status, message)
+    throw classifyHttpError(res.status, message)
+  }
+
   async test(): Promise<boolean> {
     try {
       const res = await fetch('https://api.github.com/user', { headers: this.headers })
@@ -37,28 +46,30 @@ export class GistStorage implements StorageBackend {
 
     const body = { description: 'OneBookmark 书签同步数据', public: false, files }
 
-    if (this.gistId) {
-      const res = await fetch(`https://api.github.com/gists/${this.gistId}`, {
-        method: 'PATCH',
-        headers: this.headers,
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        throw new Error(`更新 Gist 失败: ${error.message || res.statusText}`)
+    try {
+      if (this.gistId) {
+        const res = await fetch(`https://api.github.com/gists/${this.gistId}`, {
+          method: 'PATCH',
+          headers: this.headers,
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          await this.handleResponseError(res, '更新 Gist')
+        }
+      } else {
+        const res = await fetch('https://api.github.com/gists', {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify(body),
+        })
+        if (!res.ok) {
+          await this.handleResponseError(res, '创建 Gist')
+        }
+        const gist = await res.json()
+        this.gistId = gist.id
       }
-    } else {
-      const res = await fetch('https://api.github.com/gists', {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const error = await res.json().catch(() => ({}))
-        throw new Error(`创建 Gist 失败: ${error.message || res.statusText}`)
-      }
-      const gist = await res.json()
-      this.gistId = gist.id
+    } catch (err) {
+      throw classifyFetchError(err)
     }
   }
 
@@ -70,14 +81,20 @@ export class GistStorage implements StorageBackend {
         headers: this.headers,
       })
 
-      if (!res.ok) return null
+      if (!res.ok) {
+        // 404 返回 null 而不是抛错，表示 Gist 不存在
+        if (res.status === 404) return null
+        await this.handleResponseError(res, '读取 Gist')
+      }
 
       const gist = await res.json()
       const dataFile = gist.files?.[GIST_FILENAME]
 
       return dataFile?.content ? JSON.parse(dataFile.content) : null
-    } catch {
-      return null
+    } catch (err) {
+      // 如果是 SyncError 则重新抛出
+      if (err instanceof SyncError) throw err
+      throw classifyFetchError(err)
     }
   }
 

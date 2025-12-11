@@ -3,9 +3,17 @@ import { useTranslation } from 'react-i18next'
 import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, getSettings, type BackupConfig } from '@/utils/storage'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
-import { getLockStatus, forceReleaseLock, pushBookmarks, pullBookmarks, calculateSyncDiff } from '@/lib/sync'
+import { getLockStatus, forceReleaseLock, pushBookmarks, pullBookmarks, calculateSyncDiff, getErrorI18nKey, type ErrorType } from '@/lib/sync'
 import type { SyncStatus } from '@/lib/bookmark/types'
 import { motion, AnimatePresence, PressScale, springPresets, CheckIcon, CrossIcon } from '@/lib/motion'
+
+// 根据错误类型获取 i18n 消息
+function getErrorMessage(t: (key: string) => string, errorType?: ErrorType, fallbackKey?: string): string {
+  if (errorType) {
+    return t(getErrorI18nKey(errorType))
+  }
+  return t(fallbackKey || 'error.unknown')
+}
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -129,40 +137,38 @@ function App() {
     setMessage(t('popup.uploading'))
     setLockInfo(null)
 
-    try {
-      const results: { name: string; added: number; removed: number }[] = []
-      let failCount = 0
+    const results: { name: string; added: number; removed: number }[] = []
+    let failCount = 0
+    let lastErrorType: ErrorType | undefined
 
-      for (const backup of uploadBackups) {
-        const result = await pushBookmarks(backup)
-        if (result.success) {
-          const { added = 0, removed = 0 } = result.diff || {}
-          if (added > 0 || removed > 0) {
-            results.push({ name: backup.name, added, removed })
-          }
-        } else {
-          failCount++
+    for (const backup of uploadBackups) {
+      const result = await pushBookmarks(backup)
+      if (result.success) {
+        const { added = 0, removed = 0 } = result.diff || {}
+        if (added > 0 || removed > 0) {
+          results.push({ name: backup.name, added, removed })
         }
-      }
-
-      if (results.length === 0 && failCount === 0) {
-        setStatus('success')
-        setMessage(t('popup.uploadSuccessNoChanges'))
-      } else if (failCount === 0) {
-        setStatus('success')
-        const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
-        setMessage(text)
-      } else if (results.length > 0) {
-        setStatus('success')
-        setMessage(t('popup.partialSuccess', { success: results.length, fail: failCount }))
       } else {
-        throw new Error(t('popup.allUploadFailed'))
+        failCount++
+        lastErrorType = result.errorType
       }
-      await loadStatus()
-    } catch (err) {
-      setStatus('error')
-      setMessage(err instanceof Error ? err.message : t('popup.uploadFailed'))
     }
+
+    if (results.length === 0 && failCount === 0) {
+      setStatus('success')
+      setMessage(t('popup.uploadSuccessNoChanges'))
+    } else if (failCount === 0) {
+      setStatus('success')
+      const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
+      setMessage(text)
+    } else if (results.length > 0) {
+      setStatus('error')
+      setMessage(t('popup.partialSuccess', { success: results.length, fail: failCount }))
+    } else {
+      setStatus('error')
+      setMessage(getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
+    }
+    await loadStatus()
   }
 
   function handlePullClick() {
@@ -204,19 +210,15 @@ function App() {
     setMessage(t('popup.downloading'))
     setLockInfo(null)
 
-    try {
-      const result = await pullBookmarks(backup)
-      if (result.success) {
-        setStatus('success')
-        setMessage(t('popup.downloadSuccess'))
-        await loadStatus()
-        setTimeout(() => loadBookmarkStats(), 500)
-      } else {
-        throw new Error(result.error || t('popup.downloadFailed'))
-      }
-    } catch (err) {
+    const result = await pullBookmarks(backup)
+    if (result.success) {
+      setStatus('success')
+      setMessage(t('popup.downloadSuccess'))
+      await loadStatus()
+      setTimeout(() => loadBookmarkStats(), 500)
+    } else {
       setStatus('error')
-      setMessage(err instanceof Error ? err.message : t('popup.downloadFailed'))
+      setMessage(getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
     }
   }
 

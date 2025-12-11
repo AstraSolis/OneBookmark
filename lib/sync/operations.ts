@@ -11,11 +11,13 @@ import { SyncEngine } from './engine'
 import { getLocalBookmarks, getBookmarksByFolder } from '../bookmark/parser'
 import { calculateDiff } from '../bookmark/diff'
 import { updateBackup } from '@/utils/storage'
+import { SyncError, classifyFetchError, type ErrorType } from '../errors'
 
 // Push 操作结果
 export interface PushResult {
   success: boolean
   error?: string
+  errorType?: ErrorType
   diff?: { added: number; removed: number }
   newGistId?: string
 }
@@ -24,6 +26,7 @@ export interface PushResult {
 export interface PullResult {
   success: boolean
   error?: string
+  errorType?: ErrorType
   changes?: number
 }
 
@@ -99,9 +102,10 @@ export async function pushBookmarks(backup: BackupConfig): Promise<PushResult> {
       return { success: true, diff, newGistId: updates.gistId ?? undefined }
     }
 
-    return { success: false, error: result.error }
+    return { success: false, error: result.error, errorType: result.errorType }
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : '上传失败' }
+    const syncError = err instanceof SyncError ? err : classifyFetchError(err)
+    return { success: false, error: syncError.message, errorType: syncError.type }
   }
 }
 
@@ -117,8 +121,9 @@ export async function pullBookmarks(backup: BackupConfig): Promise<PullResult> {
       return { success: true, changes: result.changes }
     }
 
-    return { success: false, error: result.error }
+    return { success: false, error: result.error, errorType: result.errorType }
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : '下载失败' }
+    const syncError = err instanceof SyncError ? err : classifyFetchError(err)
+    return { success: false, error: syncError.message, errorType: syncError.type }
   }
 }

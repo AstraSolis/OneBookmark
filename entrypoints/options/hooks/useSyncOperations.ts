@@ -1,9 +1,17 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { isLocked, pushBookmarks, pullBookmarks, calculateSyncDiff } from '@/lib/sync'
+import { isLocked, pushBookmarks, pullBookmarks, calculateSyncDiff, getErrorI18nKey, type ErrorType } from '@/lib/sync'
 import { getSettings, type BackupConfig } from '@/utils/storage'
 import type { DiffResult } from '@/lib/bookmark/diff'
 import type { BackupWithProfile, SyncingState, PushResults } from '../components/dashboard-components/types'
+
+// 根据错误类型获取 i18n 消息
+function getErrorMessage(t: (key: string) => string, errorType?: ErrorType, fallbackKey?: string): string {
+  if (errorType) {
+    return t(getErrorI18nKey(errorType))
+  }
+  return t(fallbackKey || 'error.unknown')
+}
 
 interface DiffPreviewState {
   showModal: boolean
@@ -28,7 +36,7 @@ const INITIAL_DIFF_STATE: DiffPreviewState = {
   pendingPullBackup: null,
   pendingPushBackups: [],
   currentPushBackup: null,
-  pushResults: { items: [], fail: 0 }
+  pushResults: { items: [], fail: 0, lastErrorType: undefined }
 }
 
 export function useSyncOperations({ backups, onReload, showMessage }: Options) {
@@ -81,23 +89,24 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     diff?: DiffResult
   ): Promise<PushResults> => {
     setBatchSyncing('push')
-    try {
-      const result = await pushBookmarks(backup)
-      if (result.success) {
-        return {
-          items: [...results.items, {
-            name: backup.name,
-            added: diff?.added.length || result.diff?.added || 0,
-            removed: diff?.removed.length || result.diff?.removed || 0
-          }],
-          fail: results.fail
-        }
+    const result = await pushBookmarks(backup)
+    setBatchSyncing(null)
+
+    if (result.success) {
+      return {
+        items: [...results.items, {
+          name: backup.name,
+          added: diff?.added.length || result.diff?.added || 0,
+          removed: diff?.removed.length || result.diff?.removed || 0
+        }],
+        fail: results.fail,
+        lastErrorType: results.lastErrorType
       }
-      return { ...results, fail: results.fail + 1 }
-    } catch {
-      return { ...results, fail: results.fail + 1 }
-    } finally {
-      setBatchSyncing(null)
+    }
+    return {
+      ...results,
+      fail: results.fail + 1,
+      lastErrorType: result.errorType || results.lastErrorType
     }
   }, [])
 
@@ -107,7 +116,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
       ...prev,
       currentPushBackup: null,
       pendingPushBackups: [],
-      pushResults: { items: [], fail: 0 }
+      pushResults: { items: [], fail: 0, lastErrorType: undefined }
     }))
     await onReload()
 
@@ -119,7 +128,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
         .join('\n')
       showMessage('success', text)
     } else if (results.items.length === 0) {
-      showMessage('error', t('popup.uploadFailed'))
+      showMessage('error', getErrorMessage(t, results.lastErrorType, 'popup.uploadFailed'))
     } else {
       showMessage('error', t('popup.partialSuccess', { success: results.items.length, fail: results.fail }))
     }
@@ -130,6 +139,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     setBatchSyncing('push')
     const results: { name: string; added: number; removed: number }[] = []
     let failCount = 0
+    let lastErrorType: ErrorType | undefined
 
     for (const backup of uploadEnabledBackups) {
       const result = await pushBookmarks(backup)
@@ -139,6 +149,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
         }
       } else {
         failCount++
+        lastErrorType = result.errorType
       }
     }
 
@@ -155,7 +166,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     } else if (results.length > 0) {
       showMessage('error', t('popup.partialSuccess', { success: results.length, fail: failCount }))
     } else {
-      showMessage('error', t('popup.uploadFailed'))
+      showMessage('error', getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
     }
   }, [uploadEnabledBackups, t, showMessage, onReload])
 
@@ -176,9 +187,9 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
       setDiffState(prev => ({
         ...prev,
         pendingPushBackups: uploadEnabledBackups,
-        pushResults: { items: [], fail: 0 }
+        pushResults: { items: [], fail: 0, lastErrorType: undefined }
       }))
-      await processNextPushBackup(uploadEnabledBackups, { items: [], fail: 0 })
+      await processNextPushBackup(uploadEnabledBackups, { items: [], fail: 0, lastErrorType: undefined })
       return
     }
 
@@ -189,15 +200,11 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
   const executePullFromBackup = useCallback(async (backup: BackupWithProfile) => {
     setBatchSyncing('pull')
 
-    try {
-      const result = await pullBookmarks(backup)
-      if (result.success) {
-        showMessage('success', t('popup.downloadSuccess'))
-      } else {
-        showMessage('error', result.error || t('popup.downloadFailed'))
-      }
-    } catch (err) {
-      showMessage('error', err instanceof Error ? err.message : t('popup.downloadFailed'))
+    const result = await pullBookmarks(backup)
+    if (result.success) {
+      showMessage('success', t('popup.downloadSuccess'))
+    } else {
+      showMessage('error', getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
     }
 
     setBatchSyncing(null)
@@ -221,7 +228,7 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
           action: 'push',
           currentPushBackup: backup,
           pendingPushBackups: [],
-          pushResults: { items: [], fail: 0 },
+          pushResults: { items: [], fail: 0, lastErrorType: undefined },
           showModal: true
         }))
         return
@@ -229,20 +236,16 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     }
 
     setBatchSyncing('push')
-    try {
-      const result = await pushBookmarks(backup)
-      if (result.success) {
-        const { added = 0, removed = 0 } = result.diff || {}
-        if (added === 0 && removed === 0) {
-          showMessage('success', t('popup.uploadSuccessNoChanges'))
-        } else {
-          showMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
-        }
+    const result = await pushBookmarks(backup)
+    if (result.success) {
+      const { added = 0, removed = 0 } = result.diff || {}
+      if (added === 0 && removed === 0) {
+        showMessage('success', t('popup.uploadSuccessNoChanges'))
       } else {
-        showMessage('error', t('popup.uploadFailed'))
+        showMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
       }
-    } catch {
-      showMessage('error', t('popup.uploadFailed'))
+    } else {
+      showMessage('error', getErrorMessage(t, result.errorType, 'popup.uploadFailed'))
     }
     setBatchSyncing(null)
     await onReload()

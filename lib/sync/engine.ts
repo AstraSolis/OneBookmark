@@ -3,6 +3,7 @@ import type { StorageBackend } from '../storage/interface'
 import { getLocalBookmarks, getBookmarksByFolder, createSyncData } from '../bookmark/parser'
 import { writeBookmarks, writeBookmarksToFolder } from '../bookmark/writer'
 import { withLock } from './lock'
+import { SyncError } from '../errors'
 
 // 同步选项
 export interface SyncOptions {
@@ -36,6 +37,9 @@ export class SyncEngine {
       })
     } catch (err) {
       console.error('[Sync] Push 失败:', err)
+      if (err instanceof SyncError) {
+        return { success: false as const, error: err.message, errorType: err.type }
+      }
       return { success: false as const, error: err instanceof Error ? err.message : '上传失败' }
     }
   }
@@ -50,7 +54,7 @@ export class SyncEngine {
         const data = await this.storage.read()
 
         if (!data) {
-          throw new Error('远端没有数据')
+          throw new SyncError('noData')
         }
 
         const count = await writeBookmarksToFolder(data.bookmarks, folderPath || null)
@@ -60,6 +64,9 @@ export class SyncEngine {
       })
     } catch (err) {
       console.error('[Sync] Pull 失败:', err)
+      if (err instanceof SyncError) {
+        return { success: false as const, error: err.message, errorType: err.type }
+      }
       return { success: false as const, error: err instanceof Error ? err.message : '下载失败' }
     }
   }
