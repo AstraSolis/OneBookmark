@@ -2,7 +2,7 @@
   "name": "onebookmark",
   "description": "跨浏览器书签同步插件",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
