@@ -89,7 +89,9 @@
     "diffPreviewDesc": "同步前显示变更内容",
     "syncInfo": "同步信息",
     "about": "关于",
-    "aboutDesc": "一个跨浏览器书签同步工具，支持手动上传和下载书签到 GitHub Gist。"
+    "aboutDesc": "一个跨浏览器书签同步工具，支持手动上传和下载书签到 GitHub Gist。",
+    "privacyPolicy": "隐私政策",
+    "privacyPolicyDesc": "查看隐私政策"
   },
   "dashboard": {
     "title": "仪表盘",

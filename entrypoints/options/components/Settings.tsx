@@ -155,11 +155,10 @@ export function Settings() {
                         <button
                           key={type}
                           onClick={() => handleBackgroundTypeChange(type)}
-                          className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                            background.type === type
+                          className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${background.type === type
                               ? 'bg-sky-50 border-sky-200 text-sky-600'
                               : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           {t(`settings.background${type.charAt(0).toUpperCase() + type.slice(1)}`)}
                         </button>
@@ -235,14 +234,27 @@ export function Settings() {
                 <p className="text-sm text-slate-600 mb-4">
                   {t('settings.aboutDesc')}
                 </p>
-                <a
-                  href="https://github.com/AstraSolis/OneBookmark"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
-                >
-                  GitHub →
-                </a>
+                <div className="flex items-center gap-4">
+                  <a
+                    href="https://github.com/AstraSolis/OneBookmark"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    GitHub →
+                  </a>
+                  <button
+                    onClick={() => {
+                      const policyUrl = i18n.language === 'zh-CN'
+                        ? 'https://github.com/AstraSolis/OneBookmark/blob/main/PRIVACY_POLICY.md'
+                        : 'https://github.com/AstraSolis/OneBookmark/blob/main/PRIVACY_POLICY_EN.md'
+                      window.open(policyUrl, '_blank')
+                    }}
+                    className="text-sm text-sky-500 hover:text-sky-600 hover:underline"
+                  >
+                    {t('settings.privacyPolicy')} →
+                  </button>
+                </div>
               </div>
             </HoverScale>
           </FadeInUp>

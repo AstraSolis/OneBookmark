@@ -86,6 +86,10 @@ pnpm zip           # Package as zip file
 - i18next - Internationalization
 - Motion - Animation library
 
+## Privacy Policy
+
+See [Privacy Policy](./PRIVACY_POLICY_EN.md).
+
 ## Core Modules
 
 ### Bookmark Sync

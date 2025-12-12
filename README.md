@@ -86,6 +86,10 @@ pnpm zip           # 打包为 zip 文件
 - i18next - 国际化
 - Motion - 动画库
 
+## 隐私政策
+
+详见 [隐私政策](./PRIVACY_POLICY.md)。
+
 ## 核心功能模块
 
 ### 书签同步

@@ -89,7 +89,9 @@
     "diffPreviewDesc": "Show changes before sync",
     "syncInfo": "Sync Info",
     "about": "About",
-    "aboutDesc": "A cross-browser bookmark sync tool that supports manual upload and download bookmarks to GitHub Gist."
+    "aboutDesc": "A cross-browser bookmark sync tool that supports manual upload and download bookmarks to GitHub Gist.",
+    "privacyPolicy": "Privacy Policy",
+    "privacyPolicyDesc": "View privacy policy"
   },
   "dashboard": {
     "title": "Dashboard",
