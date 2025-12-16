@@ -1,0 +1,10 @@
+{
+    "extensionName": {
+        "message": "OneBookmark",
+        "description": "Extension name"
+    },
+    "extensionDescription": {
+        "message": "Cross-browser bookmark sync",
+        "description": "Extension description"
+    }
+}

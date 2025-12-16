@@ -6,8 +6,9 @@ import pkg from './package.json';
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
-    name: 'OneBookmark',
-    description: '跨浏览器书签同步插件',
+    name: '__MSG_extensionName__',
+    description: '__MSG_extensionDescription__',
+    default_locale: 'zh_CN',
     permissions: ['bookmarks', 'storage'],
     browser_specific_settings: {
       gecko: {

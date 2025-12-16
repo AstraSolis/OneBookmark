@@ -1,0 +1,10 @@
+{
+    "extensionName": {
+        "message": "OneBookmark",
+        "description": "扩展名称"
+    },
+    "extensionDescription": {
+        "message": "跨浏览器书签同步插件",
+        "description": "扩展描述"
+    }
+}
