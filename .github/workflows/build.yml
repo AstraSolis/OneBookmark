@@ -14,6 +14,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> $GITHUB_OUTPUT
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -37,11 +41,11 @@ jobs:
       - name: Upload Chrome artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chrome-extension
+          name: OneBookmark-Chrome-${{ steps.sha.outputs.short }}
           path: .output/chrome-mv3
 
       - name: Upload Firefox artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firefox-extension
+          name: OneBookmark-Firefox-${{ steps.sha.outputs.short }}
           path: .output/firefox-mv2
