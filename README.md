@@ -26,7 +26,9 @@
 
 ### 浏览器商店
 
-*即将上线*
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-安装-4285F4?style=for-the-badge)](https://chromewebstore.google.com/detail/onebookmark/nbpcngemklcmfphomlcdpkblookgeeam?hl=zh-CN&utm_source=ext_sidebar)
+[![Edge Add-ons](https://img.shields.io/badge/Edge-安装-0078D7?style=for-the-badge)](https://microsoftedge.microsoft.com/addons/detail/onebookmark/nfgehhnejnoioniplhfgpgaojnafkelj)
+![Firefox Add-ons](https://img.shields.io/badge/Firefox-待上线-gray?style=for-the-badge)
 
 ## 使用方法
 

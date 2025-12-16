@@ -26,7 +26,9 @@ Get the latest development version: Go to [Actions](https://github.com/AstraSoli
 
 ### Browser Store
 
-*Coming soon*
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Install-4285F4?style=for-the-badge)](https://chromewebstore.google.com/detail/onebookmark/nbpcngemklcmfphomlcdpkblookgeeam?hl=zh-CN&utm_source=ext_sidebar)
+[![Edge Add-ons](https://img.shields.io/badge/Edge-Install-0078D7?style=for-the-badge)](https://microsoftedge.microsoft.com/addons/detail/onebookmark/nfgehhnejnoioniplhfgpgaojnafkelj)
+![Firefox Add-ons](https://img.shields.io/badge/Firefox-Coming_Soon-gray?style=for-the-badge)
 
 ## Usage
 
