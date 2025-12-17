@@ -92,6 +92,10 @@ pnpm zip           # 打包为 zip 文件
 
 详见 [隐私政策](./PRIVACY_POLICY.md)。
 
+## 许可证
+
+本项目采用 [Apache License 2.0](./LICENSE) 许可证。
+
 ## 核心功能模块
 
 ### 书签同步

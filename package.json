@@ -3,6 +3,7 @@
   "description": "跨浏览器书签同步插件",
   "private": true,
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

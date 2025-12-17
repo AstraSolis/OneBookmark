@@ -92,6 +92,10 @@ pnpm zip           # Package as zip file
 
 See [Privacy Policy](./PRIVACY_POLICY_EN.md).
 
+## License
+
+This project is licensed under the [Apache License 2.0](./LICENSE).
+
 ## Core Modules
 
 ### Bookmark Sync
