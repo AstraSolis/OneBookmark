@@ -26,9 +26,9 @@
 
 ### 浏览器商店
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome-安装-4285F4?style=for-the-badge)](https://chromewebstore.google.com/detail/onebookmark/nbpcngemklcmfphomlcdpkblookgeeam?hl=zh-CN&utm_source=ext_sidebar)
-[![Edge Add-ons](https://img.shields.io/badge/Edge-安装-0078D7?style=for-the-badge)](https://microsoftedge.microsoft.com/addons/detail/onebookmark/nfgehhnejnoioniplhfgpgaojnafkelj)
-![Firefox Add-ons](https://img.shields.io/badge/Firefox-待上线-gray?style=for-the-badge)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-安装-blue?style=for-the-badge)](https://chromewebstore.google.com/detail/onebookmark/nbpcngemklcmfphomlcdpkblookgeeam?hl=zh-CN&utm_source=ext_sidebar)
+[![Edge Add-ons](https://img.shields.io/badge/Edge-安装-blue?style=for-the-badge)](https://microsoftedge.microsoft.com/addons/detail/onebookmark/nfgehhnejnoioniplhfgpgaojnafkelj)
+[![Firefox Add-ons](https://img.shields.io/badge/Firefox-安装-blue?style=for-the-badge)](https://addons.mozilla.org/zh-CN/firefox/addon/onebookmark/)
 
 ## 使用方法
 
