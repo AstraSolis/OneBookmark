@@ -1,4 +1,10 @@
 import type { BookmarkNode } from './types'
+import {
+  detectBrowserFromTree,
+  getLocalRootId,
+  standardizeRootTitle,
+  STANDARD_ROOT_NAMES,
+} from './root-folders'
 
 // 写入结果
 interface WriteResult {
@@ -109,14 +115,23 @@ async function ensureParentFolder(
 }
 
 // 获取根文件夹映射
+// 同时注册标准化名称（ToolbarFolder 等）和原始 title 的映射
 async function getRootFolders(): Promise<Map<string, string>> {
   const tree = await browser.bookmarks.getTree()
   const root = tree[0]
   const map = new Map<string, string>()
 
   if (root.children) {
+    const browserKind = detectBrowserFromTree(tree)
     for (const folder of root.children) {
+      // 注册原始 title → ID（兼容旧数据和本地查找）
       map.set(`/${folder.title}`, folder.id)
+
+      // 注册标准化名称 → ID（用于匹配远端标准化数据）
+      const standardName = standardizeRootTitle(folder.id, browserKind)
+      if (standardName) {
+        map.set(`/${standardName}`, folder.id)
+      }
     }
   }
 
@@ -388,10 +403,19 @@ export async function writeBookmarksFull(bookmarks: BookmarkNode[]): Promise<num
     }
 
     // 匹配本地根文件夹和远端根文件夹
+    const browserKind = detectBrowserFromTree(tree)
     for (const remoteFolder of remoteRoot.children) {
-      const localFolder = root.children.find(
+      let localFolder = root.children.find(
         (f) => f.title === remoteFolder.title || f.id === remoteFolder.id
       )
+
+      // 如果按 title/id 没找到，尝试标准化名称反向映射
+      if (!localFolder && STANDARD_ROOT_NAMES.has(remoteFolder.title)) {
+        const localId = getLocalRootId(remoteFolder.title, browserKind)
+        if (localId) {
+          localFolder = root.children.find((f) => f.id === localId)
+        }
+      }
 
       if (!localFolder || !remoteFolder.children) continue
 
@@ -530,7 +554,16 @@ async function ensureTargetFolder(folderPath: string): Promise<string | null> {
 
   // 第一部分应该是根文件夹（书签栏、其他书签等）
   const rootFolderName = parts[0]
-  const rootFolder = currentChildren.find(f => f.title === rootFolderName && !f.url)
+  let rootFolder = currentChildren.find(f => f.title === rootFolderName && !f.url)
+
+  // 如果按 title 没找到，尝试标准化名称反向映射
+  if (!rootFolder && STANDARD_ROOT_NAMES.has(rootFolderName)) {
+    const browserKind = detectBrowserFromTree(tree)
+    const localId = getLocalRootId(rootFolderName, browserKind)
+    if (localId) {
+      rootFolder = currentChildren.find(f => f.id === localId)
+    }
+  }
 
   if (!rootFolder) {
     // 根文件夹不存在，无法创建（浏览器限制）

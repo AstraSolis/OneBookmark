@@ -8,7 +8,7 @@ import type { DiffResult } from '../bookmark/diff'
 import type { BackupConfig } from '@/utils/storage'
 import { GistStorage } from '../storage/gist'
 import { SyncEngine } from './engine'
-import { getLocalBookmarks, getBookmarksByFolder } from '../bookmark/parser'
+import { getLocalBookmarks, getBookmarksByFolder, normalizeForUpload } from '../bookmark/parser'
 import { calculateDiff } from '../bookmark/diff'
 import { updateBackup } from '@/utils/storage'
 import { SyncError, classifyFetchError, type ErrorType } from '../errors'
@@ -50,13 +50,14 @@ export async function calculateSyncDiff(
     if (!remoteData) return null
 
     const localBookmarks = await getBookmarksForBackup(backup)
+    const normalizedLocal = await normalizeForUpload(localBookmarks)
     const skipRootPath = !!backup.folderPath
 
     // push: 远端 → 本地 (本地覆盖远端)
     // pull: 本地 → 远端 (远端覆盖本地)
     return direction === 'push'
-      ? calculateDiff(remoteData.bookmarks, localBookmarks, { skipRootPath })
-      : calculateDiff(localBookmarks, remoteData.bookmarks, { skipRootPath })
+      ? calculateDiff(remoteData.bookmarks, normalizedLocal, { skipRootPath })
+      : calculateDiff(normalizedLocal, remoteData.bookmarks, { skipRootPath })
   } catch {
     return null
   }
@@ -74,8 +75,9 @@ export async function pushBookmarks(backup: BackupConfig): Promise<PushResult> {
       try {
         const remoteData = await storage.read()
         const localBookmarks = await getBookmarksForBackup(backup)
+        const normalizedLocal = await normalizeForUpload(localBookmarks)
         const remoteBookmarks = remoteData?.bookmarks || []
-        const diffResult = calculateDiff(remoteBookmarks, localBookmarks, {
+        const diffResult = calculateDiff(remoteBookmarks, normalizedLocal, {
           skipRootPath: !!backup.folderPath
         })
 

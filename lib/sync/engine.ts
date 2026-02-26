@@ -1,6 +1,6 @@
 import type { SyncResult, BookmarkNode } from '../bookmark/types'
 import type { StorageBackend } from '../storage/interface'
-import { getLocalBookmarks, getBookmarksByFolder, createSyncData } from '../bookmark/parser'
+import { getLocalBookmarks, getBookmarksByFolder, createSyncData, normalizeForUpload } from '../bookmark/parser'
 import { writeBookmarks, writeBookmarksToFolder } from '../bookmark/writer'
 import { withLock } from './lock'
 import { SyncError } from '../errors'
@@ -28,7 +28,8 @@ export class SyncEngine {
         console.log('[Sync] 开始 Push 操作，文件夹:', folderPath || '根目录')
 
         const localBookmarks = await getBookmarksByFolder(folderPath || null)
-        const syncData = createSyncData(localBookmarks)
+        const normalized = await normalizeForUpload(localBookmarks)
+        const syncData = createSyncData(normalized)
 
         await this.storage.write(syncData)
 

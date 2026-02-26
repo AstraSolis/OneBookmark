@@ -1,4 +1,9 @@
 import type { BookmarkNode, SyncData } from './types'
+import {
+  detectBrowser,
+  standardizeRootTitle,
+  type BrowserKind,
+} from './root-folders'
 
 // 将浏览器书签树转换为 BookmarkNode
 export function parseBookmarkTree(
@@ -86,4 +91,47 @@ export async function getBookmarksByFolder(folderPath: string | null): Promise<B
   // 返回该文件夹的子节点，包装成与 getLocalBookmarks 相同的结构
   const subTree = await browser.bookmarks.getSubTree(folder.id)
   return parseBookmarkTree(subTree)
+}
+
+// 标准化书签树的根文件夹名称（上传前调用）
+// 将浏览器特定的根文件夹 title 替换为中性标识
+export async function normalizeForUpload(
+  bookmarks: BookmarkNode[]
+): Promise<BookmarkNode[]> {
+  const browserKind = await detectBrowser()
+  return bookmarks.map((node) => normalizeNode(node, browserKind, true))
+}
+
+// 递归标准化节点
+// isRoot: 仅对顶层根文件夹做标准化，子文件夹保持原名
+function normalizeNode(
+  node: BookmarkNode,
+  browserKind: BrowserKind,
+  isRoot: boolean
+): BookmarkNode {
+  // 虚拟根节点（无 title 有 children）：将 isRoot 透传给 children
+  if (!node.title && node.children) {
+    return {
+      ...node,
+      children: node.children.map((c) => normalizeNode(c, browserKind, true)),
+    }
+  }
+
+  // 根级别的文件夹节点：尝试标准化 title
+  if (isRoot && !node.url) {
+    const standardTitle = standardizeRootTitle(node.id, browserKind)
+    if (standardTitle) {
+      return {
+        ...node,
+        title: standardTitle,
+        children: node.children?.map((c) => normalizeNode(c, browserKind, false)),
+      }
+    }
+  }
+
+  // 非根级别或无法标准化，保持原样
+  return {
+    ...node,
+    children: node.children?.map((c) => normalizeNode(c, browserKind, false)),
+  }
 }
