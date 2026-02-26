@@ -26,11 +26,13 @@ export interface BackgroundSettings {
 // 应用设置
 export interface AppSettings {
   diffPreviewEnabled: boolean
+  badgeEnabled: boolean
   background: BackgroundSettings
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   diffPreviewEnabled: false,
+  badgeEnabled: true,
   background: { type: 'particles' }
 }
 

@@ -64,8 +64,14 @@ export async function calculateSyncDiff(
 }
 
 
+// 通知 background service 同步状态变更
+async function notifySync(type: 'sync-start' | 'sync-end') {
+  try { await browser.runtime.sendMessage({ type }) } catch { /* background 未就绪 */ }
+}
+
 // 执行 Push 操作
 export async function pushBookmarks(backup: BackupConfig): Promise<PushResult> {
+  await notifySync('sync-start')
   try {
     const storage = new GistStorage(backup.token, backup.gistId)
 
@@ -108,11 +114,14 @@ export async function pushBookmarks(backup: BackupConfig): Promise<PushResult> {
   } catch (err) {
     const syncError = err instanceof SyncError ? err : classifyFetchError(err)
     return { success: false, error: syncError.message, errorType: syncError.type }
+  } finally {
+    await notifySync('sync-end')
   }
 }
 
 // 执行 Pull 操作
 export async function pullBookmarks(backup: BackupConfig): Promise<PullResult> {
+  await notifySync('sync-start')
   try {
     const storage = new GistStorage(backup.token, backup.gistId)
     const engine = new SyncEngine(storage, { folderPath: backup.folderPath })
@@ -127,5 +136,7 @@ export async function pullBookmarks(backup: BackupConfig): Promise<PullResult> {
   } catch (err) {
     const syncError = err instanceof SyncError ? err : classifyFetchError(err)
     return { success: false, error: syncError.message, errorType: syncError.type }
+  } finally {
+    await notifySync('sync-end')
   }
 }

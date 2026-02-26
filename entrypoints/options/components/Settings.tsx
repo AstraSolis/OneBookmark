@@ -9,6 +9,7 @@ export function Settings() {
   const { t, i18n } = useTranslation()
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
+  const [badgeEnabled, setBadgeEnabled] = useState(true)
   const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
   const [bgUrlInput, setBgUrlInput] = useState('')
   const [messages, setMessages] = useState<ToastMessage[]>([])
@@ -38,6 +39,7 @@ export function Settings() {
 
     const settings = await getSettings()
     setDiffPreviewEnabled(settings.diffPreviewEnabled)
+    setBadgeEnabled(settings.badgeEnabled)
     setBackground(settings.background || { type: 'particles' })
     setBgUrlInput(settings.background?.remoteUrl || '')
   }
@@ -46,6 +48,15 @@ export function Settings() {
     const newValue = !diffPreviewEnabled
     setDiffPreviewEnabled(newValue)
     await updateSettings({ diffPreviewEnabled: newValue })
+    showMessage('success', t('settings.settingsSaved'))
+  }
+
+  async function handleToggleBadge() {
+    const newValue = !badgeEnabled
+    setBadgeEnabled(newValue)
+    await updateSettings({ badgeEnabled: newValue })
+    // 通知 background service 更新设置
+    try { await browser.runtime.sendMessage({ type: 'settings-changed', badgeEnabled: newValue }) } catch { /* ignore */ }
     showMessage('success', t('settings.settingsSaved'))
   }
 
@@ -116,6 +127,14 @@ export function Settings() {
                   <Switch enabled={diffPreviewEnabled} onChange={handleToggleDiffPreview} />
                 </div>
 
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">{t('settings.badgeEnabled')}</label>
+                    <p className="text-xs text-slate-500 mt-0.5">{t('settings.badgeEnabledDesc')}</p>
+                  </div>
+                  <Switch enabled={badgeEnabled} onChange={handleToggleBadge} />
+                </div>
+
                 {lastSyncTime && (
                   <div className="pt-2 border-t border-gray-100">
                     <p className="text-xs text-slate-500">
@@ -156,8 +175,8 @@ export function Settings() {
                           key={type}
                           onClick={() => handleBackgroundTypeChange(type)}
                           className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${background.type === type
-                              ? 'bg-sky-50 border-sky-200 text-sky-600'
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                            ? 'bg-sky-50 border-sky-200 text-sky-600'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                             }`}
                         >
                           {t(`settings.background${type.charAt(0).toUpperCase() + type.slice(1)}`)}

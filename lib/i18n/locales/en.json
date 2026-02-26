@@ -87,6 +87,8 @@
     "manual": "Manual",
     "diffPreview": "Diff Preview",
     "diffPreviewDesc": "Show changes before sync",
+    "badgeEnabled": "Change Badge",
+    "badgeEnabledDesc": "Show red dot on icon when bookmarks change",
     "syncInfo": "Sync Info",
     "about": "About",
     "aboutDesc": "A cross-browser bookmark sync tool that supports manual upload and download bookmarks to GitHub Gist.",

@@ -87,6 +87,8 @@
     "manual": "手动",
     "diffPreview": "差异预览",
     "diffPreviewDesc": "同步前显示变更内容",
+    "badgeEnabled": "变更提醒",
+    "badgeEnabledDesc": "书签变更后在图标上显示红点提醒",
     "syncInfo": "同步信息",
     "about": "关于",
     "aboutDesc": "一个跨浏览器书签同步工具，支持手动上传和下载书签到 GitHub Gist。",
