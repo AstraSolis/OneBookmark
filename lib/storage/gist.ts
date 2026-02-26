@@ -89,8 +89,21 @@ export class GistStorage implements StorageBackend {
 
       const gist = await res.json()
       const dataFile = gist.files?.[GIST_FILENAME]
+      if (!dataFile) return null
 
-      return dataFile?.content ? JSON.parse(dataFile.content) : null
+      // 处理大文件截断：通过 raw_url 获取完整内容
+      let content: string
+      if (dataFile.truncated && dataFile.raw_url) {
+        const rawRes = await fetch(dataFile.raw_url)
+        if (!rawRes.ok) {
+          throw classifyHttpError(rawRes.status, '获取完整 Gist 内容失败')
+        }
+        content = await rawRes.text()
+      } else {
+        content = dataFile.content
+      }
+
+      return content ? JSON.parse(content) : null
     } catch (err) {
       // 如果是 SyncError 则重新抛出
       if (err instanceof SyncError) throw err
