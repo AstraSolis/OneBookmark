@@ -10,6 +10,10 @@ export default defineConfig({
     description: '__MSG_extensionDescription__',
     default_locale: 'zh_CN',
     permissions: ['bookmarks', 'storage'],
+    host_permissions: [
+      'https://*.github.com/',
+      'https://*.githubusercontent.com/',
+    ],
     browser_specific_settings: {
       gecko: {
         id: '{8a7c3e2d-4f1b-4a9c-b5e6-7d8f9a0b1c2e}',
