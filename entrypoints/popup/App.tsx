@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, getSettings, type BackupConfig } from '@/utils/storage'
+import { getBackups, getUploadEnabledBackups, getDownloadEnabledBackups, getSettings, sendNotification, type BackupConfig } from '@/utils/storage'
 import { getLocalBookmarks } from '@/lib/bookmark/parser'
 import { GistStorage } from '@/lib/storage/gist'
 import { getLockStatus, forceReleaseLock, pushBookmarks, pullBookmarks, calculateSyncDiff, getErrorI18nKey, type ErrorType } from '@/lib/sync'
@@ -14,6 +14,7 @@ function getErrorMessage(t: (key: string) => string, errorType?: ErrorType, fall
   }
   return t(fallbackKey || 'error.unknown')
 }
+
 
 interface BackupWithProfile extends BackupConfig {
   username?: string
@@ -60,10 +61,10 @@ function App() {
   async function loadStatus() {
     const backups = await getBackups()
     setHasConfig(backups.length > 0)
-    
+
     const uploadEnabled = await getUploadEnabledBackups()
     const downloadEnabled = await getDownloadEnabledBackups()
-    
+
     async function loadProfiles(list: BackupConfig[]): Promise<BackupWithProfile[]> {
       return Promise.all(
         list.map(async (backup) => {
@@ -75,10 +76,10 @@ function App() {
         })
       )
     }
-    
+
     setUploadBackups(await loadProfiles(uploadEnabled))
     setDownloadBackups(await loadProfiles(downloadEnabled))
-    
+
     const allEnabled = backups.filter(b => b.enabled)
     const lastSyncTimes = allEnabled.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
     if (lastSyncTimes.length > 0) {
@@ -157,16 +158,20 @@ function App() {
     if (results.length === 0 && failCount === 0) {
       setStatus('success')
       setMessage(t('popup.uploadSuccessNoChanges'))
+      sendNotification(t('settings.notifyUploadTitle'), t('popup.uploadSuccessNoChanges'))
     } else if (failCount === 0) {
       setStatus('success')
       const text = results.map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed })).join('\n')
       setMessage(text)
+      sendNotification(t('settings.notifyUploadTitle'), text)
     } else if (results.length > 0) {
       setStatus('error')
       setMessage(t('popup.partialSuccess', { success: results.length, fail: failCount }))
+      sendNotification(t('settings.notifyUploadFailed'), t('popup.partialSuccess', { success: results.length, fail: failCount }))
     } else {
       setStatus('error')
       setMessage(getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
+      sendNotification(t('settings.notifyUploadFailed'), getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
     }
     await loadStatus()
   }
@@ -214,11 +219,13 @@ function App() {
     if (result.success) {
       setStatus('success')
       setMessage(t('popup.downloadSuccess'))
+      sendNotification(t('settings.notifyDownloadTitle'), t('popup.downloadSuccess'))
       await loadStatus()
       setTimeout(() => loadBookmarkStats(), 500)
     } else {
       setStatus('error')
       setMessage(getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
+      sendNotification(t('settings.notifyDownloadFailed'), getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
     }
   }
 
@@ -269,9 +276,9 @@ function App() {
 
             {/* 按钮区域 */}
             <div className="flex justify-center gap-3 mb-3">
-              <PressScale 
-                onClick={handlePush} 
-                disabled={isSyncing || uploadCount === 0} 
+              <PressScale
+                onClick={handlePush}
+                disabled={isSyncing || uploadCount === 0}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-sky-400 text-white text-sm font-medium rounded-xl hover:bg-sky-500 transition-colors shadow-lg shadow-sky-200/50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSyncing && message.includes(t('popup.uploading')) ? (
@@ -282,9 +289,9 @@ function App() {
                 {t('popup.upload')}
               </PressScale>
 
-              <PressScale 
-                onClick={handlePullClick} 
-                disabled={isSyncing || downloadCount === 0} 
+              <PressScale
+                onClick={handlePullClick}
+                disabled={isSyncing || downloadCount === 0}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-400 text-white text-sm font-medium rounded-xl hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-200/50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSyncing && message.includes(t('popup.downloading')) ? (

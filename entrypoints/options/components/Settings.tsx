@@ -10,6 +10,7 @@ export function Settings() {
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
   const [badgeEnabled, setBadgeEnabled] = useState(true)
+  const [notifyEnabled, setNotifyEnabled] = useState(true)
   const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
   const [bgUrlInput, setBgUrlInput] = useState('')
   const [messages, setMessages] = useState<ToastMessage[]>([])
@@ -40,6 +41,7 @@ export function Settings() {
     const settings = await getSettings()
     setDiffPreviewEnabled(settings.diffPreviewEnabled)
     setBadgeEnabled(settings.badgeEnabled)
+    setNotifyEnabled(settings.notifyEnabled)
     setBackground(settings.background || { type: 'particles' })
     setBgUrlInput(settings.background?.remoteUrl || '')
   }
@@ -57,6 +59,13 @@ export function Settings() {
     await updateSettings({ badgeEnabled: newValue })
     // 通知 background service 更新设置
     try { await browser.runtime.sendMessage({ type: 'settings-changed', badgeEnabled: newValue }) } catch { /* ignore */ }
+    showMessage('success', t('settings.settingsSaved'))
+  }
+
+  async function handleToggleNotify() {
+    const newValue = !notifyEnabled
+    setNotifyEnabled(newValue)
+    await updateSettings({ notifyEnabled: newValue })
     showMessage('success', t('settings.settingsSaved'))
   }
 
@@ -133,6 +142,14 @@ export function Settings() {
                     <p className="text-xs text-slate-500 mt-0.5">{t('settings.badgeEnabledDesc')}</p>
                   </div>
                   <Switch enabled={badgeEnabled} onChange={handleToggleBadge} />
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700">{t('settings.notifyEnabled')}</label>
+                    <p className="text-xs text-slate-500 mt-0.5">{t('settings.notifyEnabledDesc')}</p>
+                  </div>
+                  <Switch enabled={notifyEnabled} onChange={handleToggleNotify} />
                 </div>
 
                 {lastSyncTime && (

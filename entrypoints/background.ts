@@ -33,6 +33,16 @@ export default defineBackground(() => {
       }
       sendResponse(true)
     }
+    if (msg.type === 'notify') {
+      const notifId = `ob-${Date.now()}`
+      browser.notifications.create(notifId, {
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('/icon/128.png'),
+        title: msg.title || 'OneBookmark',
+        message: msg.message,
+      }).catch(() => { })
+      sendResponse(true)
+    }
     return true
   })
 

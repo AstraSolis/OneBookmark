@@ -27,12 +27,14 @@ export interface BackgroundSettings {
 export interface AppSettings {
   diffPreviewEnabled: boolean
   badgeEnabled: boolean
+  notifyEnabled: boolean
   background: BackgroundSettings
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   diffPreviewEnabled: false,
   badgeEnabled: true,
+  notifyEnabled: true,
   background: { type: 'particles' }
 }
 
@@ -46,6 +48,15 @@ export async function getSettings(): Promise<AppSettings> {
 export async function updateSettings(updates: Partial<AppSettings>): Promise<void> {
   const current = await getSettings()
   await browser.storage.local.set({ [SETTINGS_KEY]: { ...current, ...updates } })
+}
+
+// 发送系统通知（检查用户设置）
+export async function sendNotification(title: string, message: string) {
+  const settings = await getSettings()
+  if (!settings.notifyEnabled) return
+  try {
+    await browser.runtime.sendMessage({ type: 'notify', title, message })
+  } catch { /* popup 关闭时可能失败，忽略 */ }
 }
 
 // 生成唯一 ID

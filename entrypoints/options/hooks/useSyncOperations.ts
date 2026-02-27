@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { isLocked, pushBookmarks, pullBookmarks, calculateSyncDiff, getErrorI18nKey, type ErrorType } from '@/lib/sync'
-import { getSettings, type BackupConfig } from '@/utils/storage'
+import { getSettings, sendNotification, type BackupConfig } from '@/utils/storage'
 import type { DiffResult } from '@/lib/bookmark/diff'
 import type { BackupWithProfile, SyncingState, PushResults } from '../components/dashboard-components/types'
 
@@ -12,6 +12,7 @@ function getErrorMessage(t: (key: string) => string, errorType?: ErrorType, fall
   }
   return t(fallbackKey || 'error.unknown')
 }
+
 
 interface DiffPreviewState {
   showModal: boolean
@@ -122,15 +123,19 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
 
     if (results.items.length === 0 && results.fail === 0) {
       showMessage('success', t('popup.uploadSuccessNoChanges'))
+      sendNotification(t('settings.notifyUploadTitle'), t('popup.uploadSuccessNoChanges'))
     } else if (results.fail === 0) {
       const text = results.items
         .map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed }))
         .join('\n')
       showMessage('success', text)
+      sendNotification(t('settings.notifyUploadTitle'), text)
     } else if (results.items.length === 0) {
       showMessage('error', getErrorMessage(t, results.lastErrorType, 'popup.uploadFailed'))
+      sendNotification(t('settings.notifyUploadFailed'), getErrorMessage(t, results.lastErrorType, 'popup.uploadFailed'))
     } else {
       showMessage('error', t('popup.partialSuccess', { success: results.items.length, fail: results.fail }))
+      sendNotification(t('settings.notifyUploadFailed'), t('popup.partialSuccess', { success: results.items.length, fail: results.fail }))
     }
   }, [t, showMessage, onReload])
 
@@ -158,15 +163,19 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
 
     if (results.length === 0 && failCount === 0) {
       showMessage('success', t('popup.uploadSuccessNoChanges'))
+      sendNotification(t('settings.notifyUploadTitle'), t('popup.uploadSuccessNoChanges'))
     } else if (failCount === 0) {
       const text = results
         .map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed }))
         .join('\n')
       showMessage('success', text)
+      sendNotification(t('settings.notifyUploadTitle'), text)
     } else if (results.length > 0) {
       showMessage('error', t('popup.partialSuccess', { success: results.length, fail: failCount }))
+      sendNotification(t('settings.notifyUploadFailed'), t('popup.partialSuccess', { success: results.length, fail: failCount }))
     } else {
       showMessage('error', getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
+      sendNotification(t('settings.notifyUploadFailed'), getErrorMessage(t, lastErrorType, 'popup.uploadFailed'))
     }
   }, [uploadEnabledBackups, t, showMessage, onReload])
 
@@ -203,8 +212,10 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
     const result = await pullBookmarks(backup)
     if (result.success) {
       showMessage('success', t('popup.downloadSuccess'))
+      sendNotification(t('settings.notifyDownloadTitle'), t('popup.downloadSuccess'))
     } else {
       showMessage('error', getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
+      sendNotification(t('settings.notifyDownloadFailed'), getErrorMessage(t, result.errorType, 'popup.downloadFailed'))
     }
 
     setBatchSyncing(null)
@@ -241,11 +252,15 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
       const { added = 0, removed = 0 } = result.diff || {}
       if (added === 0 && removed === 0) {
         showMessage('success', t('popup.uploadSuccessNoChanges'))
+        sendNotification(t('settings.notifyUploadTitle'), t('popup.uploadSuccessNoChanges'))
       } else {
-        showMessage('success', t('popup.uploadSuccess', { name: backup.name, added, removed }))
+        const text = t('popup.uploadSuccess', { name: backup.name, added, removed })
+        showMessage('success', text)
+        sendNotification(t('settings.notifyUploadTitle'), text)
       }
     } else {
       showMessage('error', getErrorMessage(t, result.errorType, 'popup.uploadFailed'))
+      sendNotification(t('settings.notifyUploadFailed'), getErrorMessage(t, result.errorType, 'popup.uploadFailed'))
     }
     setBatchSyncing(null)
     await onReload()
@@ -314,8 +329,10 @@ export function useSyncOperations({ backups, onReload, showMessage }: Options) {
             .map(item => t('popup.uploadSuccess', { name: item.name, added: item.added, removed: item.removed }))
             .join('\n')
           showMessage('success', text)
+          sendNotification(t('settings.notifyUploadTitle'), text)
         } else if (prev.pushResults.items.length > 0) {
           showMessage('error', t('popup.partialSuccess', { success: prev.pushResults.items.length, fail: prev.pushResults.fail }))
+          sendNotification(t('settings.notifyUploadFailed'), t('popup.partialSuccess', { success: prev.pushResults.items.length, fail: prev.pushResults.fail }))
         }
       }
       return INITIAL_DIFF_STATE
