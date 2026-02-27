@@ -30,6 +30,7 @@ interface BrowserBookmarkIndex {
 // 构建浏览器书签索引
 async function buildBrowserIndex(): Promise<BrowserBookmarkIndex> {
   const tree = await browser.bookmarks.getTree()
+  const browserKind = detectBrowserFromTree(tree)
   const index: BrowserBookmarkIndex = {
     byUrl: new Map(),
     byPath: new Map(),
@@ -37,35 +38,44 @@ async function buildBrowserIndex(): Promise<BrowserBookmarkIndex> {
     all: new Map(),
   }
 
-  function traverse(nodes: chrome.bookmarks.BookmarkTreeNode[], parentPath: string) {
+  function traverse(
+    nodes: chrome.bookmarks.BookmarkTreeNode[],
+    parentPath: string,
+    isRootLevel: boolean
+  ) {
     for (let i = 0; i < nodes.length; i++) {
       const node = nodes[i]
       index.all.set(node.id, node)
 
       // 跳过没有标题的根节点（浏览器的虚拟根）
       if (!node.title && node.children) {
-        traverse(node.children, '')
+        traverse(node.children, '', true)
         continue
       }
+
+      // 根文件夹使用标准化名称，使路径与远端标准化数据一致
+      const displayTitle = isRootLevel
+        ? (standardizeRootTitle(node.id, browserKind) ?? node.title)
+        : node.title
 
       if (node.url) {
         // URL 书签：以 URL 为 key，同时记录位置信息
         index.byUrl.set(node.url, node)
         index.urlLocation.set(node.url, { parentPath, index: i })
       } else {
-        // 文件夹：以路径为 key
-        const path = `${parentPath}/${node.title}`
+        // 文件夹：以标准化路径为 key
+        const path = `${parentPath}/${displayTitle}`
         index.byPath.set(path, node)
       }
 
       if (node.children) {
-        const currentPath = node.url ? parentPath : `${parentPath}/${node.title}`
-        traverse(node.children, currentPath)
+        const currentPath = node.url ? parentPath : `${parentPath}/${displayTitle}`
+        traverse(node.children, currentPath, false)
       }
     }
   }
 
-  traverse(tree, '')
+  traverse(tree, '', false)
   return index
 }
 
