@@ -1,5 +1,6 @@
 import type { BookmarkNode } from './types'
 import {
+  RootFolderType,
   detectBrowserFromTree,
   getLocalRootId,
   standardizeRootTitle,
@@ -143,6 +144,18 @@ async function getRootFolders(): Promise<Map<string, string>> {
         map.set(`/${standardName}`, folder.id)
       }
     }
+
+    // 为当前浏览器不存在的标准根文件夹名称添加 fallback 映射
+    // 例如 Chrome 没有 MenuFolder，根据 STANDARD_TO_CHROME 映射到 OtherFolder
+    for (const standardType of Object.values(RootFolderType)) {
+      const key = `/${standardType}`
+      if (!map.has(key)) {
+        const localId = getLocalRootId(standardType, browserKind)
+        if (localId) {
+          map.set(key, localId)
+        }
+      }
+    }
   }
 
   return map
@@ -250,9 +263,26 @@ function computeChanges(
 
   processBookmarkTree(remoteBookmarks)
 
+  // 提取远端数据中出现的一级根目录路径（如 /ToolbarFolder、/OtherFolder）
+  const remoteRootPaths = new Set<string>()
+  for (const p of remotePaths) {
+    if (/^\/[^/]+$/.test(p)) remoteRootPaths.add(p)
+  }
+
   // 找出需要删除的书签（本地有但远端没有）
+  // 跳过远端未覆盖的根目录（如 Firefox 的 MenuFolder），避免跨浏览器同步时误删
   for (const [url, node] of browserIndex.byUrl) {
     if (!remoteUrls.has(url)) {
+      if (remoteRootPaths.size > 0) {
+        const location = browserIndex.urlLocation.get(url)
+        if (location) {
+          const parts = location.parentPath.split('/')
+          const rootPath = parts[1] ? `/${parts[1]}` : ''
+          if (rootPath && !remoteRootPaths.has(rootPath)) {
+            continue // 该书签所在根目录不在远端数据中，跳过删除
+          }
+        }
+      }
       toDelete.push(node.id)
     }
   }
