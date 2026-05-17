@@ -22,7 +22,8 @@
     "noData": "远端没有数据，请先上传书签",
     "permission": "权限不足，请检查 Token 权限",
     "folderNotFound": "本地文件夹不存在",
-    "unknown": "操作失败，请重试"
+    "unknown": "操作失败，请重试",
+    "storageQuota": "浏览器同步存储空间已满，请删除部分备份后重试"
   },
   "popup": {
     "welcome": "欢迎使用",

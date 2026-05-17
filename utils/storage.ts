@@ -1,3 +1,5 @@
+import { StorageQuotaError, isStorageQuotaError } from '@/lib/errors'
+
 // 单个备份配置
 export interface BackupConfig {
   id: string
@@ -13,14 +15,17 @@ export interface BackupConfig {
   folderPath: string | null
 }
 
+// CONFIG_KEY / SETTINGS_KEY 存储于 storage.sync（随浏览器账号同步）
+// LOCAL_SETTINGS_KEY 存储于 storage.local（base64 图片不适合 sync）
 const CONFIG_KEY = 'onebookmark_backups'
 const SETTINGS_KEY = 'onebookmark_settings'
+const LOCAL_SETTINGS_KEY = 'onebookmark_local_settings'
 
 // 背景设置
 export interface BackgroundSettings {
   type: 'particles' | 'remote' | 'local' | 'none'
   remoteUrl?: string
-  localData?: string // Base64 编码的图片数据
+  localData?: string // Base64 编码的图片数据，单独存于 storage.local
 }
 
 // 应用设置
@@ -38,16 +43,41 @@ const DEFAULT_SETTINGS: AppSettings = {
   background: { type: 'particles' }
 }
 
-// 获取设置
+// 获取设置（sync 常规设置 + local localData 合并）
 export async function getSettings(): Promise<AppSettings> {
-  const result = await browser.storage.local.get(SETTINGS_KEY)
-  return { ...DEFAULT_SETTINGS, ...result[SETTINGS_KEY] }
+  const [syncResult, localResult] = await Promise.all([
+    browser.storage.sync.get(SETTINGS_KEY),
+    browser.storage.local.get(LOCAL_SETTINGS_KEY),
+  ])
+  const syncSettings = syncResult[SETTINGS_KEY] || {}
+  const localBackground = localResult[LOCAL_SETTINGS_KEY] || {}
+  return {
+    ...DEFAULT_SETTINGS,
+    ...syncSettings,
+    background: {
+      ...DEFAULT_SETTINGS.background,
+      ...syncSettings.background,
+      localData: localBackground.localData,
+    },
+  }
 }
 
-// 更新设置
+// 更新设置（localData 写 local，其余写 sync）
 export async function updateSettings(updates: Partial<AppSettings>): Promise<void> {
   const current = await getSettings()
-  await browser.storage.local.set({ [SETTINGS_KEY]: { ...current, ...updates } })
+  const merged = { ...current, ...updates }
+  const { background, ...otherSettings } = merged
+  const { localData, ...backgroundWithoutLocalData } = background || {}
+
+  try {
+    await Promise.all([
+      browser.storage.sync.set({ [SETTINGS_KEY]: { ...otherSettings, background: backgroundWithoutLocalData } }),
+      browser.storage.local.set({ [LOCAL_SETTINGS_KEY]: { localData } }),
+    ])
+  } catch (err) {
+    if (isStorageQuotaError(err)) throw new StorageQuotaError()
+    throw err
+  }
 }
 
 // 发送系统通知（检查用户设置）
@@ -66,13 +96,18 @@ function generateId(): string {
 
 // 获取所有备份
 export async function getBackups(): Promise<BackupConfig[]> {
-  const result = await browser.storage.local.get(CONFIG_KEY)
+  const result = await browser.storage.sync.get(CONFIG_KEY)
   return result[CONFIG_KEY] || []
 }
 
 // 保存所有备份
 async function saveBackups(backups: BackupConfig[]): Promise<void> {
-  await browser.storage.local.set({ [CONFIG_KEY]: backups })
+  try {
+    await browser.storage.sync.set({ [CONFIG_KEY]: backups })
+  } catch (err) {
+    if (isStorageQuotaError(err)) throw new StorageQuotaError()
+    throw err
+  }
 }
 
 // 获取启用的备份
@@ -126,4 +161,40 @@ export async function toggleBackup(id: string): Promise<void> {
     backup.enabled = !backup.enabled
     await saveBackups(backups)
   }
+}
+
+// 将旧版 storage.local 数据迁移到 storage.sync（首次运行时调用）
+export async function migrateToSync(): Promise<void> {
+  const [syncBackups, syncSettings, localBackups, localSettings] = await Promise.all([
+    browser.storage.sync.get(CONFIG_KEY),
+    browser.storage.sync.get(SETTINGS_KEY),
+    browser.storage.local.get(CONFIG_KEY),
+    browser.storage.local.get(SETTINGS_KEY),
+  ])
+
+  const writes: Promise<void>[] = []
+  const localKeysToRemove: string[] = []
+
+  // 各 key 独立判断：sync 无数据且 local 有旧数据时才迁移
+  if (!syncBackups[CONFIG_KEY] && localBackups[CONFIG_KEY]) {
+    writes.push(browser.storage.sync.set({ [CONFIG_KEY]: localBackups[CONFIG_KEY] }))
+    localKeysToRemove.push(CONFIG_KEY)
+  }
+
+  if (!syncSettings[SETTINGS_KEY] && localSettings[SETTINGS_KEY]) {
+    const old = localSettings[SETTINGS_KEY]
+    const { background, ...otherSettings } = old
+    const { localData, ...backgroundWithoutLocalData } = background || {}
+    writes.push(browser.storage.sync.set({ [SETTINGS_KEY]: { ...otherSettings, background: backgroundWithoutLocalData } }))
+    if (localData) {
+      writes.push(browser.storage.local.set({ [LOCAL_SETTINGS_KEY]: { localData } }))
+    }
+    localKeysToRemove.push(SETTINGS_KEY)
+  }
+
+  if (writes.length === 0) return
+
+  await Promise.all(writes)
+  await browser.storage.local.remove(localKeysToRemove)
+  console.log('[Storage] 迁移完成：配置已从 local 迁移到 sync', localKeysToRemove)
 }

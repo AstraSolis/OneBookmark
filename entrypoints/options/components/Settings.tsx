@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getEnabledBackups, getSettings, updateSettings, type BackgroundSettings } from '@/utils/storage'
+import { StorageQuotaError } from '@/lib/errors'
 import { LanguageCards } from '@/lib/i18n/LanguageCards'
 import { FadeInUp, HoverScale, Switch } from '@/lib/motion'
 import { Toast, createToastId, type ToastMessage } from './Toast'
@@ -49,38 +50,58 @@ export function Settings() {
   async function handleToggleDiffPreview() {
     const newValue = !diffPreviewEnabled
     setDiffPreviewEnabled(newValue)
-    await updateSettings({ diffPreviewEnabled: newValue })
-    showMessage('success', t('settings.settingsSaved'))
+    try {
+      await updateSettings({ diffPreviewEnabled: newValue })
+      showMessage('success', t('settings.settingsSaved'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   async function handleToggleBadge() {
     const newValue = !badgeEnabled
     setBadgeEnabled(newValue)
-    await updateSettings({ badgeEnabled: newValue })
-    // 通知 background service 更新设置
-    try { await browser.runtime.sendMessage({ type: 'settings-changed', badgeEnabled: newValue }) } catch { /* ignore */ }
-    showMessage('success', t('settings.settingsSaved'))
+    try {
+      await updateSettings({ badgeEnabled: newValue })
+      // 通知 background service 更新设置
+      try { await browser.runtime.sendMessage({ type: 'settings-changed', badgeEnabled: newValue }) } catch { /* ignore */ }
+      showMessage('success', t('settings.settingsSaved'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   async function handleToggleNotify() {
     const newValue = !notifyEnabled
     setNotifyEnabled(newValue)
-    await updateSettings({ notifyEnabled: newValue })
-    showMessage('success', t('settings.settingsSaved'))
+    try {
+      await updateSettings({ notifyEnabled: newValue })
+      showMessage('success', t('settings.settingsSaved'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   async function handleBackgroundTypeChange(type: BackgroundSettings['type']) {
     const newBg: BackgroundSettings = { type, remoteUrl: background.remoteUrl, localData: background.localData }
     setBackground(newBg)
-    await updateSettings({ background: newBg })
-    showMessage('success', t('settings.backgroundChanged'))
+    try {
+      await updateSettings({ background: newBg })
+      showMessage('success', t('settings.backgroundChanged'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   async function handleApplyRemoteUrl() {
     const newBg: BackgroundSettings = { type: 'remote', remoteUrl: bgUrlInput, localData: background.localData }
     setBackground(newBg)
-    await updateSettings({ background: newBg })
-    showMessage('success', t('settings.backgroundApplied'))
+    try {
+      await updateSettings({ background: newBg })
+      showMessage('success', t('settings.backgroundApplied'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   function handleLocalImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -92,8 +113,12 @@ export function Settings() {
       const base64 = event.target?.result as string
       const newBg: BackgroundSettings = { type: 'local', localData: base64, remoteUrl: background.remoteUrl }
       setBackground(newBg)
-      await updateSettings({ background: newBg })
-      showMessage('success', t('settings.backgroundApplied'))
+      try {
+        await updateSettings({ background: newBg })
+        showMessage('success', t('settings.backgroundApplied'))
+      } catch (err) {
+        showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+      }
     }
     reader.readAsDataURL(file)
   }
@@ -101,8 +126,12 @@ export function Settings() {
   async function handleClearLocalImage() {
     const newBg: BackgroundSettings = { type: 'local', localData: undefined, remoteUrl: background.remoteUrl }
     setBackground(newBg)
-    await updateSettings({ background: newBg })
-    showMessage('success', t('settings.backgroundCleared'))
+    try {
+      await updateSettings({ background: newBg })
+      showMessage('success', t('settings.backgroundCleared'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
   }
 
   return (

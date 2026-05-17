@@ -8,6 +8,7 @@ import {
   deleteBackup,
   type BackupConfig
 } from '@/utils/storage'
+import { StorageQuotaError } from '@/lib/errors'
 import { GistStorage } from '@/lib/storage/gist'
 import { FadeInUp, HoverScale, PressScale, Skeleton } from '@/lib/motion'
 import { useSyncOperations } from '../hooks/useSyncOperations'
@@ -142,24 +143,32 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       await deleteBackup(id)
       await loadBackups()
       showMessage('success', t('dashboard.backupDeleted'))
-    } catch {
-      showMessage('error', t('dashboard.deleteFailed'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('dashboard.deleteFailed'))
     }
   }
 
   async function handleToggleUpload(id: string) {
     const backup = backups.find(b => b.id === id)
     if (backup) {
-      await updateBackup(id, { uploadEnabled: backup.uploadEnabled === false })
-      await loadBackups()
+      try {
+        await updateBackup(id, { uploadEnabled: backup.uploadEnabled === false })
+        await loadBackups()
+      } catch (err) {
+        showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('dashboard.saveFailed'))
+      }
     }
   }
 
   async function handleToggleDownload(id: string) {
     const backup = backups.find(b => b.id === id)
     if (backup) {
-      await updateBackup(id, { downloadEnabled: backup.downloadEnabled === false })
-      await loadBackups()
+      try {
+        await updateBackup(id, { downloadEnabled: backup.downloadEnabled === false })
+        await loadBackups()
+      } catch (err) {
+        showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('dashboard.saveFailed'))
+      }
     }
   }
 
@@ -189,8 +198,8 @@ export function Dashboard({ initialAction, onActionHandled }: DashboardProps) {
       }
       await loadBackups()
       setShowModal(false)
-    } catch {
-      showMessage('error', t('dashboard.saveFailed'))
+    } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('dashboard.saveFailed'))
     }
   }
 

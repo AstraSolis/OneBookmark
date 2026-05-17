@@ -14,6 +14,21 @@ export type ErrorType =
   | 'folderNotFound' // 本地文件夹不存在
   | 'unknown'      // 未知错误
 
+// Storage sync 配额超出错误
+export class StorageQuotaError extends Error {
+  constructor() {
+    super('storage.sync quota exceeded')
+    this.name = 'StorageQuotaError'
+  }
+}
+
+// 检测浏览器扩展 storage.sync 配额错误（Chrome / Firefox 均适用）
+export function isStorageQuotaError(err: unknown): boolean {
+  if (err instanceof Error && err.name === 'QuotaExceededError') return true
+  const msg = err instanceof Error ? err.message : String(err)
+  return /QUOTA_BYTES|MAX_ITEMS|quota exceeded/i.test(msg)
+}
+
 // 同步错误类
 export class SyncError extends Error {
   type: ErrorType

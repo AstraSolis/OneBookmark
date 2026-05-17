@@ -1,7 +1,10 @@
-import { getSettings } from '@/utils/storage'
+import { getSettings, migrateToSync } from '@/utils/storage'
 
 export default defineBackground(() => {
   console.log('OneBookmark background service started', { id: browser.runtime.id })
+
+  // 启动时迁移旧版 local 数据到 sync
+  migrateToSync().catch(err => console.warn('[Storage] 迁移失败:', err))
 
   // 标记是否正在同步（同步期间的书签变更不触发 badge）
   let isSyncing = false
