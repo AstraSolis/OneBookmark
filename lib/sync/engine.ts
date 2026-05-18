@@ -29,7 +29,7 @@ export class SyncEngine {
 
         const localBookmarks = await getBookmarksByFolder(folderPath || null)
         const normalized = await normalizeForUpload(localBookmarks)
-        const syncData = createSyncData(normalized)
+        const syncData = await createSyncData(normalized)
 
         await this.storage.write(syncData)
 

@@ -18,25 +18,23 @@ export function parseBookmarkTree(
   }))
 }
 
-// 生成书签数据的 checksum
-export function generateChecksum(bookmarks: BookmarkNode[]): string {
+// 生成书签数据的 checksum（SHA-1，160-bit）
+export async function generateChecksum(bookmarks: BookmarkNode[]): Promise<string> {
   const str = JSON.stringify(bookmarks)
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash = hash & hash
-  }
-  return Math.abs(hash).toString(16)
+  const encoded = new TextEncoder().encode(str)
+  const hashBuffer = await crypto.subtle.digest('SHA-1', encoded)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
 }
 
 // 创建同步数据
-export function createSyncData(bookmarks: BookmarkNode[]): SyncData {
+export async function createSyncData(bookmarks: BookmarkNode[]): Promise<SyncData> {
   return {
     version: 1,
     lastSync: Date.now(),
     bookmarks,
-    checksum: generateChecksum(bookmarks),
+    checksum: await generateChecksum(bookmarks),
   }
 }
 
