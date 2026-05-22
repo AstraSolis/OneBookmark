@@ -12,6 +12,9 @@ export function Settings() {
   const [diffPreviewEnabled, setDiffPreviewEnabled] = useState(false)
   const [badgeEnabled, setBadgeEnabled] = useState(true)
   const [notifyEnabled, setNotifyEnabled] = useState(true)
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(false)
+  const [autoSyncInterval, setAutoSyncInterval] = useState(60)
+  const [intervalInputValue, setIntervalInputValue] = useState('60')
   const [background, setBackground] = useState<BackgroundSettings>({ type: 'particles' })
   const [bgUrlInput, setBgUrlInput] = useState('')
   const [messages, setMessages] = useState<ToastMessage[]>([])
@@ -32,6 +35,10 @@ export function Settings() {
     loadConfig()
   }, [i18n.language])
 
+  useEffect(() => {
+    setIntervalInputValue(String(autoSyncInterval))
+  }, [autoSyncInterval])
+
   async function loadConfig() {
     const backups = await getEnabledBackups()
     const times = backups.map(b => b.lastSyncTime).filter((t): t is number => t !== null)
@@ -43,6 +50,8 @@ export function Settings() {
     setDiffPreviewEnabled(settings.diffPreviewEnabled)
     setBadgeEnabled(settings.badgeEnabled)
     setNotifyEnabled(settings.notifyEnabled)
+    setAutoSyncEnabled(settings.autoSyncEnabled ?? false)
+    setAutoSyncInterval(settings.autoSyncInterval ?? 60)
     setBackground(settings.background || { type: 'particles' })
     setBgUrlInput(settings.background?.remoteUrl || '')
   }
@@ -78,6 +87,34 @@ export function Settings() {
       await updateSettings({ notifyEnabled: newValue })
       showMessage('success', t('settings.settingsSaved'))
     } catch (err) {
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
+  }
+
+  async function handleToggleAutoSync() {
+    const newValue = !autoSyncEnabled
+    setAutoSyncEnabled(newValue)
+    try {
+      await updateSettings({ autoSyncEnabled: newValue })
+      try { await browser.runtime.sendMessage({ type: 'settings-changed', autoSyncEnabled: newValue }) } catch { /* ignore */ }
+      showMessage('success', t('settings.settingsSaved'))
+    } catch (err) {
+      setAutoSyncEnabled(!newValue)
+      showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
+    }
+  }
+
+  async function handleAutoSyncIntervalChange(minutes: number) {
+    const previousValue = autoSyncInterval
+    setAutoSyncInterval(minutes)
+    try {
+      await updateSettings({ autoSyncInterval: minutes })
+      if (autoSyncEnabled) {
+        try { await browser.runtime.sendMessage({ type: 'settings-changed', autoSyncEnabled: true }) } catch { /* ignore */ }
+      }
+      showMessage('success', t('settings.settingsSaved'))
+    } catch (err) {
+      setAutoSyncInterval(previousValue)
       showMessage('error', err instanceof StorageQuotaError ? t('error.storageQuota') : t('error.unknown'))
     }
   }
@@ -179,6 +216,63 @@ export function Settings() {
                     <p className="text-xs text-slate-500 mt-0.5">{t('settings.notifyEnabledDesc')}</p>
                   </div>
                   <Switch enabled={notifyEnabled} onChange={handleToggleNotify} />
+                </div>
+
+                <div className="pt-3 border-t border-gray-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700">{t('settings.autoSync')}</label>
+                      <p className="text-xs text-slate-500 mt-0.5">{t('settings.autoSyncDesc')}</p>
+                    </div>
+                    <Switch enabled={autoSyncEnabled} onChange={handleToggleAutoSync} />
+                  </div>
+                  {autoSyncEnabled && (
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-slate-500">{t('settings.autoSyncInterval')}</label>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {[15, 30, 60, 120, 240].map((min) => (
+                          <button
+                            key={min}
+                            onClick={() => handleAutoSyncIntervalChange(min)}
+                            className={`px-2.5 py-1 text-xs rounded-lg border transition-colors ${
+                              autoSyncInterval === min
+                                ? 'bg-sky-50 border-sky-200 text-sky-600'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}
+                          >
+                            {min < 60 ? `${min}m` : `${min / 60}h`}
+                          </button>
+                        ))}
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={1}
+                            max={1440}
+                            value={intervalInputValue}
+                            onChange={(e) => setIntervalInputValue(e.target.value)}
+                            onBlur={() => {
+                              const v = parseInt(intervalInputValue, 10)
+                              if (!isNaN(v) && v >= 1 && v <= 1440) handleAutoSyncIntervalChange(v)
+                              else setIntervalInputValue(String(autoSyncInterval))
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const v = parseInt(intervalInputValue, 10)
+                                if (!isNaN(v) && v >= 1 && v <= 1440) handleAutoSyncIntervalChange(v)
+                                else setIntervalInputValue(String(autoSyncInterval))
+                              }
+                            }}
+                            className={`w-14 px-2 py-1 text-xs border rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-sky-200 focus:border-sky-300 ${
+                              ![15, 30, 60, 120, 240].includes(autoSyncInterval)
+                                ? 'border-sky-200 bg-sky-50 text-sky-600'
+                                : 'border-gray-200'
+                            }`}
+                          />
+                          <span className="text-xs text-slate-400">{t('settings.autoSyncIntervalUnit')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {lastSyncTime && (

@@ -33,6 +33,8 @@ export interface AppSettings {
   diffPreviewEnabled: boolean
   badgeEnabled: boolean
   notifyEnabled: boolean
+  autoSyncEnabled: boolean
+  autoSyncInterval: number  // 单位：分钟
   background: BackgroundSettings
 }
 
@@ -40,6 +42,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   diffPreviewEnabled: false,
   badgeEnabled: true,
   notifyEnabled: true,
+  autoSyncEnabled: false,
+  autoSyncInterval: 60,
   background: { type: 'particles' }
 }
 
